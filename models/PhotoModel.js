@@ -12,7 +12,7 @@ const createPhoto = async (connectionId, userId, filePath) => {
 
 const getPhotosByConnection = async (connectionId) => {
     const query = `
-        SELECT pid, file_path, user_id, created_at
+        SELECT pid, file_path, user_id, created_at, connection_id
         FROM photos
         WHERE connection_id = $1
         ORDER BY created_at DESC
@@ -21,7 +21,24 @@ const getPhotosByConnection = async (connectionId) => {
     return result.rows;
 };
 
+const getPhotoById = async (photoId) => {
+    const query = `
+        SELECT pid, file_path, user_id, connection_id
+        FROM photos
+        WHERE pid = $1
+        LIMIT 1
+    `;
+    const result = await db.query(query, [photoId]);
+    return result.rows[0];
+};
+
+const deletePhotoById = async (photoId) => {
+    await db.query('DELETE FROM photos WHERE pid = $1', [photoId]);
+};
+
 module.exports = {
     createPhoto,
-    getPhotosByConnection
+    getPhotosByConnection,
+    getPhotoById,
+    deletePhotoById
 };

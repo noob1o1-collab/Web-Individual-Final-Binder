@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 const findUserByEmail = async (email) => {
     try {
-        const query = 'SELECT * FROM users WHERE email = $1';
+        const query = 'SELECT uid, firstname AS username, email, password, birthday FROM users WHERE email = $1';
         const result = await db.query(query, [email]);
         return result.rows[0];
     } catch (error) {
@@ -13,7 +13,7 @@ const findUserByEmail = async (email) => {
 
 const findUserByUsername = async (username) => {
     try {
-        const query = 'SELECT * FROM users WHERE firstname = $1';
+        const query = 'SELECT uid, firstname AS username, email, password, birthday FROM users WHERE firstname = $1';
         const result = await db.query(query, [username]);
         return result.rows[0];
     } catch (error) {
@@ -28,7 +28,7 @@ const registerUser = async (user) => {
         const query = `
             INSERT INTO users (firstname, email, password, birthday) 
             VALUES ($1, $2, $3, $4) 
-            RETURNING uid, firstname, email, birthday
+            RETURNING uid, firstname AS username, email, birthday
         `;
         const values = [firstName, email, password, birthday || null];
         const result = await db.query(query, values);
@@ -39,8 +39,40 @@ const registerUser = async (user) => {
     }
 };
 
+const findUserById = async (id) => {
+    try {
+        const query = 'SELECT uid, firstname AS username, email, birthday FROM users WHERE uid = $1';
+        const result = await db.query(query, [id]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error finding user by id:', error);
+        throw new Error('Database user lookup by id failed');
+    }
+};
+
+const updateUserProfile = async (userId, updates) => {
+    try {
+        const { username, birthday } = updates;
+        const query = `
+            UPDATE users
+            SET firstname = COALESCE(NULLIF($1, ''), firstname),
+                birthday = COALESCE($2, birthday)
+            WHERE uid = $3
+            RETURNING uid, firstname AS username, email, birthday
+        `;
+        const values = [username || null, birthday || null, userId];
+        const result = await db.query(query, values);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        throw new Error('Database user profile update failed');
+    }
+};
+
 module.exports = {
     registerUser,
     findUserByEmail,
-    findUserByUsername
+    findUserByUsername,
+    findUserById,
+    updateUserProfile
 };
