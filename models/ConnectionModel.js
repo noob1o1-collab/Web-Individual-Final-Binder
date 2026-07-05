@@ -82,6 +82,25 @@ const deleteConnection = async (connectionId) => {
         throw new Error('Database row erasure breakdown');
     }
 };
+const getActiveConnection = async (userId) => {
+    try {
+        const query = `
+            SELECT c.cid, c.relationship_type, c.anniversary_date, c.sender_id, c.receiver_id,
+                   u1.firstname AS sender_username, u1.birthday AS sender_birthday,
+                   u2.firstname AS receiver_username, u2.birthday AS receiver_birthday
+            FROM connections c
+            JOIN users u1 ON u1.uid = c.sender_id
+            JOIN users u2 ON u2.uid = c.receiver_id
+            WHERE (c.sender_id = $1 OR c.receiver_id = $1) AND c.status = 'accepted'
+            LIMIT 1
+        `;
+        const result = await db.query(query, [userId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error fetching active relationship connection:', error);
+        throw new Error('Database active connection query failure');
+    }
+};
 
 module.exports = {
     findExistingConnection,
@@ -89,5 +108,6 @@ module.exports = {
     getConnectionById,
     getPendingRequestsForUser,
     updateConnectionStatus,
-    deleteConnection
+    deleteConnection,
+    getActiveConnection 
 };
