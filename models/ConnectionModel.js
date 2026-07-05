@@ -30,7 +30,64 @@ const initiateConnection = async (senderId, receiverId, type, anniversaryDate) =
     }
 };
 
+const getConnectionById = async (connectionId) => {
+    try {
+        const query = 'SELECT * FROM connections WHERE cid = $1';
+        const result = await db.query(query, [connectionId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error fetching connection by ID:', error);
+        throw new Error('Database read execution failure');
+    }
+};
+
+const getPendingRequestsForUser = async (userId) => {
+    try {
+        const query = `
+            SELECT c.cid, c.relationship_type, c.anniversary_date, c.created_at,
+                   u.firstname AS sender_username 
+            FROM connections c 
+            JOIN users u ON u.uid = c.sender_id 
+            WHERE c.receiver_id = $1 AND c.status = 'pending'
+        `;
+        const result = await db.query(query, [userId]);
+        return result.rows;
+    } catch (error) {
+        console.error('Error querying inbound pending requests:', error);
+        throw new Error('Database list extraction breakdown');
+    }
+};
+
+const updateConnectionStatus = async (connectionId, status) => {
+    try {
+        const query = `
+            UPDATE connections 
+            SET status = $1, updated_at = NOW() 
+            WHERE cid = $2 
+            RETURNING *
+        `;
+        const result = await db.query(query, [status, connectionId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error performing connection status update:', error);
+        throw new Error('Database state modification failure');
+    }
+};
+
+const deleteConnection = async (connectionId) => {
+    try {
+        await db.query('DELETE FROM connections WHERE cid = $1', [connectionId]);
+    } catch (error) {
+        console.error('Error removing connection entry:', error);
+        throw new Error('Database row erasure breakdown');
+    }
+};
+
 module.exports = {
     findExistingConnection,
-    initiateConnection
+    initiateConnection,
+    getConnectionById,
+    getPendingRequestsForUser,
+    updateConnectionStatus,
+    deleteConnection
 };
