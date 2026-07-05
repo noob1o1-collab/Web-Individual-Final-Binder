@@ -7,4 +7,6 @@ router.get('/pending', authMiddleware, connectionController.getPendingRequests);
 router.post('/accept/:id', authMiddleware, connectionController.acceptConnection);
 router.post('/decline/:id', authMiddleware, connectionController.declineConnection);
 
+router.get('/status', authMiddleware, connectionController.getConnectionStatus);
+
 module.exports = router;
