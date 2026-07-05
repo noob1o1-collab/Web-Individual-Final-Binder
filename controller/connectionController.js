@@ -105,3 +105,38 @@ exports.declineConnection = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error declining connection request.' });
     }
 };
+exports.getConnectionStatus = async (req, res) => {
+    try {
+        const currentUserId = req.user.id; 
+        
+        const activeConnection = await ConnectionModel.getActiveConnection(currentUserId);
+
+        if (!activeConnection) {
+            return res.json({ 
+                success: true, 
+                connected: false, 
+                message: 'User is not currently linked to any active collaborative space.' 
+            });
+        }
+
+        const isSender = activeConnection.sender_id === currentUserId;
+        
+        const partnerInfo = {
+            id: isSender ? activeConnection.receiver_id : activeConnection.sender_id,
+            username: isSender ? activeConnection.receiver_username : activeConnection.sender_username,
+            birthday: isSender ? activeConnection.receiver_birthday : activeConnection.sender_birthday,
+            relationshipType: activeConnection.relationship_type,
+            anniversaryDate: activeConnection.anniversary_date
+        };
+
+        return res.json({
+            success: true,
+            connected: true,
+            connectionId: activeConnection.cid,
+            partner: partnerInfo
+        });
+    } catch (error) {
+        console.error('Error within getConnectionStatus routine:', error);
+        return res.status(500).json({ error: 'Internal server error processing relationship status query.' });
+    }
+};
