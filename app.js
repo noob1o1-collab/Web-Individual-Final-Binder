@@ -32,7 +32,23 @@ app.get('/api/health', (req, res) => {
     res.json({ status: "healthy", message: "Binder REST API is fully operational." });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Binder REST API Server running on port ${PORT}`);
-});
+const DEFAULT_PORT = Number(process.env.PORT) || 5001;
+
+const startServer = (port) => {
+    const server = app.listen(port, () => {
+        console.log(`Binder REST API Server running on port ${port}`);
+    });
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            const nextPort = port + 1;
+            console.error(`Port ${port} is already in use. Trying ${nextPort}...`);
+            startServer(nextPort);
+            return;
+        }
+
+        console.error('Server failed to start:', err.message);
+    });
+};
+
+startServer(DEFAULT_PORT);
