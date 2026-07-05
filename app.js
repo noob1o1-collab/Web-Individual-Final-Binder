@@ -23,7 +23,11 @@ app.get('/api/csrf-token', (req, res) => {
 });
 
 const userRoutes = require('./routes/userRoutes');
+const connectionRoutes = require('./routes/connectionRoutes');
+
 app.use('/api/users', userRoutes); 
+app.use('/api/connections', connectionRoutes);
+
 app.get('/api/health', (req, res) => {
     res.json({ status: "healthy", message: "Binder REST API is fully operational." });
 });
