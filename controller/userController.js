@@ -1,134 +1,141 @@
-const DiaryModel = require('../models/DiaryModel');
-const ConnectionModel = require('../models/ConnectionModel');
+const UserModel = require('../models/UserModel');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-exports.addDiaryEntry = async (req, res) => {
+exports.registerUser = async (req, res) => {
     try {
-        const { title, description, isShared } = req.body;
+        const { username, email, password, birthday } = req.body;
+        
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: 'Username, email, and password are required.' });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Invalid email address format.' });
+        }
+
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+        }
+
+        const existingUsername = await UserModel.findUserByUsername(username);
+        if (existingUsername) {
+            return res.status(400).json({ error: 'Username handle is already taken.' });
+        }
+
+        const existingEmail = await UserModel.findUserByEmail(email);
+        if (existingEmail) {
+            return res.status(400).json({ error: 'Email address is already registered.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newUser = await UserModel.registerUser({
+            firstName: username,
+            email,
+            password: hashedPassword,
+            birthday: birthday || null
+        });
+
+        const token = jwt.sign(
+            { userId: newUser.uid, username: newUser.firstname }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '2h' }
+        );
+
+        res.cookie('token', token, { httpOnly: true, secure: false });
+        return res.status(201).json({ success: true, message: 'User account created successfully.', user: newUser });
+    } catch (error) {
+        console.error('Registration processing error:', error);
+        return res.status(500).json({ error: 'Internal server error creating account.' });
+    }
+};
+
+exports.loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required.' });
+        }
+
+        const user = await UserModel.findUserByEmail(email);
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ error: 'Invalid email or password credentials.' });
+        }
+
+        const token = jwt.sign(
+            { userId: user.uid, username: user.firstname }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '2h' }
+        );
+
+        res.cookie('token', token, { httpOnly: true, secure: false });
+        return res.json({ 
+            success: true, 
+            message: 'Authentication successful.', 
+            user: { uid: user.uid, username: user.firstname, email: user.email } 
+        });
+    } catch (error) {
+        console.error('Login routing processing failure:', error);
+        return res.status(500).json({ error: 'Internal server error processing sign-in.' });
+    }
+};
+
+exports.logoutUser = (req, res) => {
+    res.clearCookie('token');
+    return res.json({ success: true, message: 'Logged out successfully.' });
+};
+
+exports.updateUserProfile = async (req, res) => {
+    try {
         const currentUserId = req.user.id;
-        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
+        const { username, birthday } = req.body;
 
-        if (!title || !description) {
-            return res.status(400).json({ error: 'Diary entry title and description body fields are required.' });
+        if (!username && !birthday) {
+            return res.status(400).json({ error: 'No profile fields were provided for update.' });
         }
 
-        if (isShared === true || isShared === 'true') {
-            if (!connectionId) {
-                return res.status(400).json({ error: 'Connection id is required to write shared diary entries.' });
-            }
-            const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
-            if (!activeLink) {
-                return res.status(403).json({ error: 'Access denied. You must be in an accepted relationship space to write to a shared journal.' });
+        if (username && username.trim() !== req.user.username) {
+            const existingUser = await UserModel.findUserByUsername(username.trim());
+            if (existingUser && existingUser.uid !== currentUserId) {
+                return res.status(409).json({ error: 'That username is already taken by another account.' });
             }
         }
 
-        const savedEntry = await DiaryModel.createEntry(title, description, currentUserId, isShared, connectionId ? Number(connectionId) : null);
-        return res.status(201).json({ success: true, message: 'Log entry added successfully.', entry: savedEntry });
+        const updatedUser = await UserModel.updateUserProfile(currentUserId, {
+            username: username ? username.trim() : undefined,
+            birthday: birthday || null
+        });
+
+        const token = jwt.sign(
+            { userId: updatedUser.uid, username: updatedUser.firstname },
+            process.env.JWT_SECRET,
+            { expiresIn: '2h' }
+        );
+
+        res.cookie('token', token, { httpOnly: true, secure: false });
+        return res.json({ success: true, message: 'Profile updated successfully.', user: {
+            uid: updatedUser.uid,
+            username: updatedUser.firstname,
+            email: updatedUser.email,
+            birthday: updatedUser.birthday
+        } });
     } catch (error) {
-        console.error('Diary posting handling exception:', error);
-        return res.status(500).json({ error: 'Internal server error committing diary log.' });
+        console.error('Error updating user profile:', error);
+        return res.status(500).json({ error: 'Internal server error updating profile.' });
     }
 };
 
-exports.fetchPersonalSpace = async (req, res) => {
+exports.getMe = async (req, res) => {
     try {
-        const logs = await DiaryModel.getPersonalEntries(req.user.id);
-        return res.json({ success: true, space: 'private', logs });
+        const user = await UserModel.findUserById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User profile not found.' });
+        }
+        return res.json({ user });
     } catch (error) {
-        return res.status(500).json({ error: 'Internal server error pulling personal logs.' });
-    }
-};
-
-exports.fetchSharedSpace = async (req, res) => {
-    try {
-        const currentUserId = req.user.id;
-        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
-
-        if (!connectionId) {
-            return res.status(400).json({ error: 'Connection id is required to fetch shared diary entries.' });
-        }
-
-        const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
-        if (!activeLink) {
-            return res.status(403).json({ error: 'Access denied. Shared archives are locked until a connection space is active.' });
-        }
-
-        const logs = await DiaryModel.getSharedEntries(req.user.id, Number(connectionId));
-        return res.json({ success: true, space: 'collaborative', logs });
-    } catch (error) {
-        return res.status(500).json({ error: 'Internal server error pulling shared journals.' });
-    }
-};
-
-exports.eraseDiaryEntry = async (req, res) => {
-    try {
-        const diaryId = req.params.id;
-        const currentUserId = req.user.id;
-
-        const targetEntry = await DiaryModel.getEntryById(diaryId);
-        if (!targetEntry) {
-            return res.status(404).json({ error: 'The requested log entry could not be located.' });
-        }
-
-        if (targetEntry.creator !== currentUserId) {
-            return res.status(403).json({ error: 'Authorization verification failed. You cannot delete an entry written by another user.' });
-        }
-
-        await DiaryModel.deleteEntry(diaryId);
-        return res.json({ success: true, message: 'Diary record entry successfully cleared from space logs.' });
-    } catch (error) {
-        console.error('Diary erasure routine exception:', error);
-        return res.status(500).json({ error: 'Internal server error executing deletion sequence.' });
-    }
-};
-
-exports.editDiaryEntry = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { title, description } = req.body;
-        const userId = req.user.id;
-        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
-
-        const targetEntry = await DiaryModel.getEntryById(id);
-        if (!targetEntry) {
-            return res.status(404).json({ error: 'Diary entry not found.' });
-        }
-
-        let updatedEntry;
-
-        if (targetEntry.creator !== userId) {
-            if (!targetEntry.is_shared) {
-                return res.status(403).json({ error: 'Unauthorized operation. You can only edit your own diary logs.' });
-            }
-
-            if (!connectionId) {
-                return res.status(400).json({ error: 'Connection id is required to edit shared diary entries.' });
-            }
-
-            const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), userId);
-            if (!activeLink || (targetEntry.creator !== activeLink.sender_id && targetEntry.creator !== activeLink.receiver_id)) {
-                return res.status(403).json({ error: 'Unauthorized operation. You can only edit shared entries within your accepted connection.' });
-            }
-
-            updatedEntry = await DiaryModel.updateSharedDiaryEntry(
-                id,
-                title || targetEntry.title,
-                description || targetEntry.description,
-                targetEntry.is_shared,
-                userId
-            );
-        } else {
-            updatedEntry = await DiaryModel.updateDiaryEntry(
-                id,
-                title || targetEntry.title,
-                description || targetEntry.description,
-                targetEntry.is_shared,
-                userId
-            );
-        }
-
-        return res.json({ message: 'Diary entry updated successfully!', log: updatedEntry });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Internal server error during diary modification.' });
+        console.error('Error retrieving current user profile:', error);
+        return res.status(500).json({ error: 'Internal server error retrieving profile.' });
     }
 };

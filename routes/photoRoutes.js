@@ -25,5 +25,6 @@ const upload = multer({
 
 router.post('/upload', authMiddleware, upload.single('photo'), PhotoController.uploadPhoto);
 router.get('/shared', authMiddleware, PhotoController.fetchSharedPhotos);
+router.delete('/:pid', authMiddleware, PhotoController.deletePhoto);
 
 module.exports = router;

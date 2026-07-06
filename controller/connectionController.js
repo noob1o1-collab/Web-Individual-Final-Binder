@@ -176,3 +176,77 @@ exports.getConnectionDetail = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error retrieving connection detail.' });
     }
 };
+
+exports.linkAccount = async (req, res) => {
+    try {
+        const { connectionId, emailOrUsername } = req.body;
+        const currentUserId = req.user.id;
+
+        if (!connectionId || !emailOrUsername) {
+            return res.status(400).json({ error: 'Connection ID and email or username are required.' });
+        }
+
+        const targetIdentifier = String(emailOrUsername).trim();
+        let targetUser = null;
+        if (targetIdentifier.includes('@')) {
+            targetUser = await UserModel.findUserByEmail(targetIdentifier);
+        } else {
+            targetUser = await UserModel.findUserByUsername(targetIdentifier);
+        }
+
+        if (!targetUser) {
+            return res.status(404).json({ error: 'No user account was found using the provided email or username.' });
+        }
+
+        if (targetUser.uid === currentUserId) {
+            return res.status(400).json({ error: 'You cannot link the connection to your own account.' });
+        }
+
+        const existingConnection = await ConnectionModel.findExistingConnection(currentUserId, targetUser.uid);
+        if (existingConnection && existingConnection.cid !== Number(connectionId)) {
+            return res.status(409).json({ error: 'This account is already linked by another active connection with you.' });
+        }
+
+        const updatedConnection = await ConnectionModel.updateConnectionPartner(Number(connectionId), currentUserId, targetUser.uid);
+        if (!updatedConnection) {
+            return res.status(404).json({ error: 'Connection not found or not authorized for linking.' });
+        }
+
+        const refreshedConnection = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
+        const isSender = refreshedConnection.sender_id === currentUserId;
+        const partnerInfo = {
+            id: isSender ? refreshedConnection.receiver_id : refreshedConnection.sender_id,
+            partner_username: isSender ? refreshedConnection.receiver_username : refreshedConnection.sender_username,
+            partner_birthday: isSender ? refreshedConnection.receiver_birthday : refreshedConnection.sender_birthday,
+            relationship_type: refreshedConnection.relationship_type,
+            anniversary_date: refreshedConnection.anniversary_date
+        };
+
+        return res.json({ success: true, message: 'Account link updated successfully.', connection: partnerInfo });
+    } catch (error) {
+        console.error('Error linking account to connection:', error);
+        return res.status(500).json({ error: 'Internal server error linking account to connection.' });
+    }
+};
+
+exports.updateConnectionDates = async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const { anniversaryDate } = req.body;
+
+        if (anniversaryDate === undefined) {
+            return res.status(400).json({ error: 'Anniversary date must be provided.' });
+        }
+
+        const activeConnections = await ConnectionModel.getAcceptedConnectionsForUser(currentUserId);
+        if (!activeConnections || activeConnections.length === 0) {
+            return res.status(404).json({ error: 'No active connection available to update.' });
+        }
+
+        const updatedConnection = await ConnectionModel.updateConnectionAnniversary(activeConnections[0].cid, anniversaryDate);
+        return res.json({ success: true, message: 'Space anniversary updated successfully.', connection: updatedConnection });
+    } catch (error) {
+        console.error('Error updating connection dates:', error);
+        return res.status(500).json({ error: 'Internal server error updating connection dates.' });
+    }
+};
