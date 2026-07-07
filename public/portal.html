@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Binder - Portal Workspace</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #121214; color: #e1e1e6; margin: 0; padding: 2rem; }
+        .dashboard-wrapper { max-width: 1100px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #29292e; padding-bottom: 1rem; margin-bottom: 2rem; }
+        h1, h2, h3 { margin: 0; color: #fff; }
+        h1 span { color: #8257e5; }
+        .btn { padding: 0.6rem 1.2rem; border-radius: 4px; font-weight: bold; cursor: pointer; border: none; font-size: 0.95rem; }
+        .btn-danger { background: #f75a5a; color: #fff; }
+        .btn-primary { background: #8257e5; color: #fff; }
+        .btn-success { background: #04d361; color: #fff; }
+        .grid-layout { display: grid; grid-template-columns: 1fr; gap: 2rem; }
+        @media(min-width: 768px) { .grid-layout { grid-template-columns: 1fr 1fr; } }
+        .panel { background: #202024; border-radius: 6px; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); border: 1px solid #29292e; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.4rem; color: #a8a8b3; font-size: 0.9rem; }
+        input, textarea, select { width: 95%; padding: 0.65rem; background: #121214; border: 1px solid #29292e; border-radius: 4px; color: #fff; font-size: 1rem; }
+        input:focus, textarea:focus { outline: none; border-color: #8257e5; }
+        .request-item, .diary-card { background: #121214; border: 1px solid #29292e; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; position: relative; }
+        .request-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .diary-card .delete-btn { position: absolute; top: 1rem; right: 1rem; background: transparent; color: #f75a5a; border: none; cursor: pointer; font-weight: bold; }
+        .badge { background: #29292e; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; color: #8257e5; font-weight: bold; }
+        .countdown-ticker { background: linear-gradient(135deg, #202024, #29292e); font-size: 1.1rem; padding: 1rem; border-radius: 4px; text-align: center; border-left: 4px solid #8257e5; }
+        .portal-card { background: #202024; border-radius: 6px; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); border: 1px solid #29292e; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
+        .full-width { grid-column: 1 / -1; }
+        .game-board-grid { display: grid; grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); gap: 8px; background-color: #202024; padding: 8px; border-radius: 8px; border: 1px solid #323238; }
+        .game-cell { background-color: #121214; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: bold; color: #e1e1e6; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+        .game-cell:hover { background-color: #29292e; }
+        .game-cell.taken { cursor: not-allowed; }
+        .game-cell[data-symbol="X"] { color: #f75a5a; }
+        .game-cell[data-symbol="O"] { color: #4da6ff; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-wrapper">
+        <header>
+            <h1>Space<span>Binder</span> Workspace</h1>
+            <div>
+                <span id="userGreeting" style="margin-right: 1rem; font-weight: bold;">Loading identity...</span>
+                <button class="btn btn-danger" id="logoutBtn">Exit Session</button>
+            </div>
+        </header>
+
+        <div id="portalMessage" style="padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; display: none; text-align: center; font-weight: bold;"></div>
+
+        <div id="unconnectedView" class="grid-layout" style="display: none;">
+            <div class="panel">
+                <h2>Find Friend/Loved one</h2>
+                <p style="color: #a8a8b3; font-size: 0.9rem; line-height: 1.4; margin: 0.5rem 0 1.5rem 0;">
+                    Search for your partner by entering their username below.
+                </p>
+                <form id="connectForm">
+                    <div class="form-group">
+                        <label>Friend/Loved one Username</label>
+                        <input type="text" id="targetUsername" required placeholder="e.g., StarGazer">
+                    </div>
+                    <div class="form-group">
+                        <label>Relationship Type</label>
+                        <select id="relationshipType">
+                            <option value="friend">Friend Shared Space</option>
+                            <option value="lover">Romantic Shared Space</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Anniversary Date (Optional)</label>
+                        <input type="date" id="anniversaryDate">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">search and request</button>
+                </form>
+            </div>
+
+            <div class="panel">
+                <h2>Incoming Invitations</h2>
+                <div id="pendingRequestsList" style="margin-top: 1.5rem; color: #a8a8b3;">
+                    Checking for pending space invites...
+                </div>
+            </div>
+        </div>
+
+        <div id="connectedView" class="grid-layout" style="display: none;">
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="panel">
+                    <h2>Space Partner Profile</h2>
+                    <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
+                    <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
+                    <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
+                </div>
+
+                <div class="panel">
+                    <h2>New Diary Log Entry</h2>
+                    <form id="diaryForm" style="margin-top: 1rem;">
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" id="diaryTitle" required placeholder="A memorable title...">
+                        </div>
+                        <div class="form-group">
+                            <label>Detail Description Content</label>
+                            <textarea id="diaryDescription" rows="4" required placeholder="Document your thoughts..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Choose Privacy Level</label>
+                            <select id="diaryScope">
+                                <option value="false">Private Archive (Personal View Only)</option>
+                                <option value="true">Shared Log (Visible to Partner)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="width: 100%;">Publish Record</button>
+                    </form>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="panel">
+                    <h2>Your Personal Diary</h2>
+                    <div id="personalFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                </div>
+
+                <div class="panel">
+                    <h2>Our Shared Journal</h2>
+                    <div id="sharedFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            
+        </div>
+
+    </div>
+
+    <script src="portal.js"></script>
+</body>
+</html>
