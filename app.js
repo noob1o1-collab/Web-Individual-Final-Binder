@@ -26,16 +26,11 @@ app.get('/api/csrf-token', (req, res) => {
 
 const userRoutes = require('./routes/userRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
+const diaryRoutes = require('./routes/diaryRoutes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/connections', connectionRoutes);
-
-const diaryRoutesPath = path.join(__dirname, 'routes', 'diaryRoutes.js');
-if (fs.existsSync(diaryRoutesPath)) {
-    const diaryRoutes = require('./routes/diaryRoutes');
-    app.use('/api/diaries', diaryRoutes);
-}
-
+app.use('/api/diaries', diaryRoutes);
 app.get('/api/health', (req, res) => {
     res.json({ status: 'healthy', message: 'Binder REST API is fully operational.' });
 });
