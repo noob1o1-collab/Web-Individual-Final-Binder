@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
@@ -7,17 +9,17 @@ require('dotenv').config();
 const app = express();
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); 
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(session({
     secret: process.env.SESSION_SECRET || 'session_secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } 
+    cookie: { secure: false }
 }));
-
 app.use(csrf({ cookie: true }));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.get('/api/csrf-token', (req, res) => {
     res.json({ csrfToken: req.csrfToken() });
 });
@@ -25,14 +27,20 @@ app.get('/api/csrf-token', (req, res) => {
 const userRoutes = require('./routes/userRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
 
-app.use('/api/users', userRoutes); 
+app.use('/api/users', userRoutes);
 app.use('/api/connections', connectionRoutes);
 
+const diaryRoutesPath = path.join(__dirname, 'routes', 'diaryRoutes.js');
+if (fs.existsSync(diaryRoutesPath)) {
+    const diaryRoutes = require('./routes/diaryRoutes');
+    app.use('/api/diaries', diaryRoutes);
+}
+
 app.get('/api/health', (req, res) => {
-    res.json({ status: "healthy", message: "Binder REST API is fully operational." });
+    res.json({ status: 'healthy', message: 'Binder REST API is fully operational.' });
 });
 
-const DEFAULT_PORT = Number(process.env.PORT) || 5001;
+const DEFAULT_PORT = Number(process.env.PORT) || 5000;
 
 const startServer = (port) => {
     const server = app.listen(port, () => {
