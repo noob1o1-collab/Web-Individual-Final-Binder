@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Binder - Welcome</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #121214; color: #e1e1e6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .auth-container { background: #202024; padding: 2.5rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 100%; max-width: 400px; }
+        h2 { text-align: center; color: #8257e5; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1.25rem; }
+        label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: #a8a8b3; }
+        input { width: 92%; padding: 0.75rem; background: #121214; border: 1px solid #29292e; border-radius: 4px; color: #fff; font-size: 1rem; }
+        input:focus { outline: none; border-color: #8257e5; }
+        button { width: 100%; padding: 0.75rem; background: #8257e5; border: none; border-radius: 4px; color: #fff; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #9466ff; }
+        .alert { padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.9rem; display: none; text-align: center; }
+        .alert-error { background: rgba(247, 90, 90, 0.2); color: #f75a5a; border: 1px solid #f75a5a; }
+        .alert-success { background: rgba(4, 211, 97, 0.2); color: #04d361; border: 1px solid #04d361; }
+        .toggle-link { text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: #a8a8b3; cursor: pointer; }
+        .toggle-link span { color: #8257e5; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div id="alertBox" class="alert"></div>
+
+        <div id="loginPanel">
+            <h2>Sign In to Binder</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="loginEmail" required placeholder="name@domain.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••">
+                </div>
+                <button type="submit">Access Workspace</button>
+            </form>
+            <div class="toggle-link" id="toRegister">Don't have an account? <span>Register handle</span></div>
+        </div>
+
+        <div id="registerPanel" style="display: none;">
+            <h2>Create Spaces Account</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label>Username (Unique Handle)</label>
+                    <input type="text" id="regUsername" required placeholder="e.g., StarGazer">
+                </div>
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="regEmail" required placeholder="name@domain.com">
+                </div>
+                <div class="form-group">
+                    <label>Password (Min 8 Characters)</label>
+                    <input type="password" id="regPassword" required placeholder="••••••••">
+                </div>
+                <div class="form-group">
+                    <label>Birthday (Optional)</label>
+                    <input type="date" id="regBirthday">
+                </div>
+                <button type="submit">Establish Account</button>
+            </form>
+            <div class="toggle-link" id="toLogin">Already registered? <span>Sign in here</span></div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+</body>
+</html>
