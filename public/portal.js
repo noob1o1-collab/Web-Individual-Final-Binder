@@ -2,6 +2,7 @@ let localCsrfToken = "";
 let currentUserContext = null;
 let activeConnectionId = null;
 let acceptedConnections = [];
+let currentConnectionDetail = null;
 // game features removed
 
 function flashSystemMessage(msg, isSuccess = true) {
@@ -139,7 +140,10 @@ async function loadPendingInvitationsList() {
 
 async function loadAcceptedConnections() {
     const listElement = document.getElementById('connectionList');
-    if (!listElement) return;
+    const altList = document.getElementById('switchSpaceTab');
+    if (!listElement && !altList) return;
+    if (listElement) listElement.innerHTML = '';
+    if (altList) altList.innerHTML = '';
 
     try {
         const res = await fetch('/api/connections/accepted');
@@ -152,11 +156,12 @@ async function loadAcceptedConnections() {
         acceptedConnections = data.connections || [];
 
         if (!acceptedConnections.length) {
-            listElement.innerText = 'no partner linked yet, check invite or search username of your loved one';
+            if (listElement) listElement.innerText = 'no partner linked yet, check invite or search username of your loved one';
+            if (altList) altList.innerText = 'no partner linked yet, check invite or search username of your loved one';
             return;
         }
 
-        listElement.innerHTML = acceptedConnections.map(connection => {
+        const html = acceptedConnections.map(connection => {
             return `
                 <div class="connection-item" data-connection-id="${connection.cid}">
                     <div style="display:flex; flex-direction:column;">
@@ -166,6 +171,9 @@ async function loadAcceptedConnections() {
                 </div>
             `;
         }).join('');
+
+        if (listElement) listElement.innerHTML = html;
+        if (altList) altList.innerHTML = html;
 
         document.querySelectorAll('.connection-item').forEach(item => {
             item.addEventListener('click', async () => {
@@ -208,14 +216,25 @@ async function selectWorkspaceConnection(connectionId) {
         activeSubheader.innerText = `${connection.relationship_type} space is active for this session.`;
     }
 
+    await loadActiveConnectionProfile(connectionId);
+
     const body = document.body;
     const openDiaryBtn = document.getElementById('openDiaryModalBtn');
-    if (connection && connection.relationship_type === 'lover') {
+    const relType = connection && connection.relationship_type ? String(connection.relationship_type).toLowerCase() : '';
+    if (relType === 'lover') {
         body.classList.add('theme-lover');
         if (openDiaryBtn) openDiaryBtn.innerText = 'Send Love Letter';
+        const modalHeader = document.querySelector('#diaryModal h3');
+        if (modalHeader) modalHeader.innerText = 'Send Love Letter';
+        const modalSubmit = document.querySelector('#diaryModal button[type="submit"]');
+        if (modalSubmit) modalSubmit.innerText = 'Send Love Letter';
     } else {
         body.classList.remove('theme-lover');
         if (openDiaryBtn) openDiaryBtn.innerText = 'Add Notes';
+        const modalHeader = document.querySelector('#diaryModal h3');
+        if (modalHeader) modalHeader.innerText = 'New Diary Log Entry';
+        const modalSubmit = document.querySelector('#diaryModal button[type="submit"]');
+        if (modalSubmit) modalSubmit.innerText = 'Publish Record';
     }
 
     await Promise.all([
@@ -229,24 +248,59 @@ async function selectWorkspaceConnection(connectionId) {
 async function renderSharedGallery() {
     const container = document.getElementById('sharedGallery');
     if (!container) return;
+    container.innerHTML = '';
     if (!activeConnectionId) {
         container.innerHTML = '<p style="color:#a8a8b3;">No gallery available.</p>';
         return;
     }
     try {
         const res = await fetch(`/api/photos/shared?connectionId=${activeConnectionId}`);
-        const data = await res.json();
         if (!res.ok) {
-            container.innerHTML = `<p style="color:#f75a5a;">${data.error || 'Failed to load gallery.'}</p>`;
+            const errBody = await res.json().catch(() => ({}));
+            container.innerHTML = `<p style="color:#f75a5a;">${errBody.error || 'Failed to load gallery.'}</p>`;
             return;
         }
-        if (!data.photos || data.photos.length === 0) {
+        const data = await res.json().catch(() => ({ photos: [] }));
+        const photos = Array.isArray(data.photos) ? data.photos : [];
+        if (photos.length === 0) {
             container.innerHTML = '<p style="color:#a8a8b3;">No images uploaded yet.</p>';
             return;
         }
-        container.innerHTML = data.photos.map(p => `<img src="${p.file_path}" alt="photo-${p.pid}" />`).join('');
+        const images = photos.map(p => {
+            const src = p.file_path && p.file_path.startsWith('/') ? p.file_path : `/${(p.file_path || '').replace(/^\//, '')}`;
+            return `
+                <div class="photo-card">
+                    <img src="${src}" alt="photo-${p.pid}" />
+                    <button class="photo-delete-btn" data-id="${p.pid}" aria-label="Delete photo">🗑️</button>
+                </div>
+            `;
+        }).join('');
+        container.innerHTML = images;
+        container.querySelectorAll('.photo-delete-btn').forEach(button => {
+            button.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const photoId = button.getAttribute('data-id');
+                if (!photoId) return;
+                if (!confirm('Are you sure you want to delete this photo?')) return;
+                try {
+                    const deleteRes = await fetch(`/api/photos/${photoId}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-Token': localCsrfToken }
+                    });
+                    const result = await deleteRes.json();
+                    if (deleteRes.ok) {
+                        flashSystemMessage(result.message, true);
+                        await renderSharedGallery();
+                    } else {
+                        flashSystemMessage(result.error || 'Unable to delete photo.', false);
+                    }
+                } catch (deleteErr) {
+                    flashSystemMessage('Photo deletion failed.', false);
+                }
+            });
+        });
     } catch (err) {
-        container.innerText = 'Error loading gallery.';
+        container.innerHTML = '<p style="color:#a8a8b3;">No images uploaded yet.</p>';
     }
 }
 
@@ -259,14 +313,9 @@ async function renderConnectionCounters() {
         return;
     }
 
-    const res = await fetch(`/api/connections/detail?connectionId=${activeConnectionId}`);
-    if (!res.ok) {
-        countdownContainer.innerHTML = '<div style="color:#f75a5a;">Unable to load connection counters.</div>';
-        return;
-    }
-
-    const data = await res.json();
-    const connection = data.connection;
+    const connection = currentConnectionDetail && currentConnectionDetail.cid === activeConnectionId
+        ? currentConnectionDetail
+        : await fetchConnectionDetail(activeConnectionId);
     if (!connection) {
         countdownContainer.innerHTML = '<div style="color:#f75a5a;">Connection details unavailable.</div>';
         return;
@@ -279,10 +328,16 @@ async function renderConnectionCounters() {
     const welcomeCard = document.getElementById('welcomeCard');
     let countdownHTML = '';
 
+    if (currentUserContext && currentUserContext.birthday) {
+        const ub = new Date(currentUserContext.birthday);
+        if (ub.getMonth() === tMonth && ub.getDate() === tDate) {
+            if (welcomeCard) welcomeCard.innerHTML = `<h2>🎉 Happy Birthday ${currentUserContext.username}! 🎂✨</h2>`;
+        }
+    }
+
     if (connection.partner_birthday) {
         const pb = new Date(connection.partner_birthday);
         if (pb.getMonth() === tMonth && pb.getDate() === tDate) {
-            if (welcomeCard) welcomeCard.innerHTML = `<h2>🎉 Happy Birthday ${connection.partner_username}! 🎂✨</h2>`;
             countdownHTML += `<div class="countdown-ticker">🎉 Today is ${connection.partner_username}'s Birthday! 🎂</div>`;
         } else {
             countdownHTML += parseDateCountdown(connection.partner_birthday, `${connection.partner_username}'s Birthday Celebration`);
@@ -327,33 +382,130 @@ async function resolveRequestHook(connectionId, actionType) {
     }
 }
 
+async function fetchConnectionDetail(connectionId) {
+    try {
+        const res = await fetch(`/api/connections/detail?connectionId=${connectionId}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.connection || null;
+    } catch (err) {
+        return null;
+    }
+}
+
+async function loadActiveConnectionProfile(connectionId) {
+    currentConnectionDetail = null;
+    const partnerNameEl = document.getElementById('partnerNameDisplay');
+    const spaceTypeEl = document.getElementById('spaceTypeDisplay');
+    const linkButton = document.getElementById('linkAccountBtn');
+
+    if (!connectionId || !partnerNameEl || !spaceTypeEl) return;
+
+    const connection = await fetchConnectionDetail(connectionId);
+    currentConnectionDetail = connection ? { ...connection, cid: connectionId } : null;
+
+    if (!currentConnectionDetail) {
+        partnerNameEl.innerText = 'Linked Account: --';
+        spaceTypeEl.innerText = 'Status: --';
+        if (linkButton) linkButton.style.display = 'none';
+        return;
+    }
+
+    const hasPartnerUsername = Boolean(currentConnectionDetail.partner_username);
+    partnerNameEl.innerText = `Linked Account: ${hasPartnerUsername ? currentConnectionDetail.partner_username : 'not linked yet'}`;
+    spaceTypeEl.innerText = `Status: ${hasPartnerUsername ? 'Active' : 'Requires account link'}`;
+
+    if (linkButton) {
+        linkButton.style.display = hasPartnerUsername ? 'none' : 'inline-flex';
+        linkButton.onclick = () => {
+            const modal = document.getElementById('linkAccountModal');
+            if (modal) modal.style.display = 'flex';
+        };
+    }
+}
+
+const relationshipTypeSelect = document.getElementById('relationshipType');
+const anniversaryContainer = document.getElementById('anniversaryContainer');
+
+function updateAnniversaryFieldVisibility() {
+    if (!relationshipTypeSelect || !anniversaryContainer) return;
+    const isLover = relationshipTypeSelect.value === 'lover';
+    anniversaryContainer.style.display = isLover ? 'block' : 'none';
+}
+
+if (relationshipTypeSelect) {
+    relationshipTypeSelect.addEventListener('change', updateAnniversaryFieldVisibility);
+}
+
+updateAnniversaryFieldVisibility();
+
 const connectForm = document.getElementById('connectForm');
+const sidebarConnectForm = document.getElementById('sidebarConnectForm');
+
+async function submitConnectionRequest(targetUsername, relationshipType, anniversaryDate) {
+    const payload = {
+        targetUsername: targetUsername.trim(),
+        relationshipType,
+        anniversaryDate: anniversaryDate || null
+    };
+
+    try {
+        const res = await fetch('/api/connections/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+            body: JSON.stringify(payload)
+        });
+        const output = await res.json();
+
+        if (res.ok) {
+            flashSystemMessage(output.message, true);
+            return true;
+        }
+
+        flashSystemMessage(output.error, false);
+        return false;
+    } catch (err) {
+        flashSystemMessage('Network failure establishing tracking request vector.', false);
+        return false;
+    }
+}
+
 if (connectForm) {
     connectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const payload = {
-            targetUsername: document.getElementById('targetUsername').value.trim(),
-            relationshipType: document.getElementById('relationshipType').value,
-            anniversaryDate: document.getElementById('anniversaryDate').value || null
-        };
+        const success = await submitConnectionRequest(
+            document.getElementById('targetUsername').value,
+            relationshipTypeSelect ? relationshipTypeSelect.value : 'friend',
+            document.getElementById('anniversaryDate').value
+        );
+        if (success) connectForm.reset();
+    });
+}
 
-        try {
-            const res = await fetch('/api/connections/request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
-                body: JSON.stringify(payload)
-            });
-            const output = await res.json();
+const sidebarRelationshipTypeSelect = document.getElementById('sidebarRelationshipType');
+const sidebarAnniversaryContainer = document.getElementById('sidebarAnniversaryContainer');
 
-            if (res.ok) {
-                flashSystemMessage(output.message, true);
-                connectForm.reset();
-            } else {
-                flashSystemMessage(output.error, false);
-            }
-        } catch (err) {
-            flashSystemMessage('Network failure establishing tracking request vector.', false);
-        }
+function updateSidebarAnniversaryFieldVisibility() {
+    if (!sidebarRelationshipTypeSelect || !sidebarAnniversaryContainer) return;
+    const isLover = sidebarRelationshipTypeSelect.value === 'lover';
+    sidebarAnniversaryContainer.style.display = isLover ? 'block' : 'none';
+}
+
+if (sidebarRelationshipTypeSelect) {
+    sidebarRelationshipTypeSelect.addEventListener('change', updateSidebarAnniversaryFieldVisibility);
+}
+
+updateSidebarAnniversaryFieldVisibility();
+
+if (sidebarConnectForm) {
+    sidebarConnectForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const success = await submitConnectionRequest(
+            document.getElementById('sidebarTargetUsername').value,
+            sidebarRelationshipTypeSelect ? sidebarRelationshipTypeSelect.value : 'friend',
+            document.getElementById('sidebarAnniversaryDate').value
+        );
+        if (success) sidebarConnectForm.reset();
     });
 }
 
@@ -435,7 +587,7 @@ const diaryForm = document.getElementById('diaryForm');
 if (diaryForm) {
     diaryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-   
+
         const targetEditId = document.getElementById('editDiaryId').value;
         const isSharedValue = targetEditId
             ? document.getElementById('editDiaryIsShared').value === 'true'
@@ -530,13 +682,18 @@ function prepareLogEditHook(diaryId) {
     }
     document.getElementById('diaryScope').disabled = true;
 
-    const headerTitle = document.querySelector('#diaryForm').previousElementSibling;
-    if (headerTitle) headerTitle.innerText = "✏️ Edit Diary Log Entry";
+    const diaryModal = document.getElementById('diaryModal');
+    if (diaryModal) diaryModal.style.display = 'flex';
+
+    const headerTitle = document.querySelector('#diaryModal h3');
+    if (headerTitle) {
+        headerTitle.innerText = document.body.classList.contains('theme-lover') ? '✏️ Edit Love Letter' : '✏️ Edit Diary Entry';
+    }
     
-    const submitBtn = document.querySelector('#diaryForm button[type="submit"]');
+    const submitBtn = document.querySelector('#diaryModal button[type="submit"]');
     if (submitBtn) {
-        submitBtn.innerText = "Save Modifications Vector";
-        submitBtn.className = "btn btn-primary";
+        submitBtn.innerText = 'Update Record';
+        submitBtn.className = 'btn btn-primary';
     }
     
     if (!document.getElementById('cancelEditBtn')) {
@@ -546,7 +703,7 @@ function prepareLogEditHook(diaryId) {
         cancelBtn.className = 'btn btn-danger';
         cancelBtn.style.marginTop = '0.5rem';
         cancelBtn.style.width = '100%';
-        cancelBtn.innerText = '🚫 Cancel Form Modification';
+        cancelBtn.innerText = 'Cancel Edit';
         cancelBtn.onclick = clearDiaryFormWorkspaceState;
         document.getElementById('diaryForm').appendChild(cancelBtn);
     }
@@ -560,13 +717,13 @@ function clearDiaryFormWorkspaceState() {
     document.getElementById('editDiaryIsShared').value = '';
     document.getElementById('diaryForm').reset();
     
-    const headerTitle = document.querySelector('#diaryForm').previousElementSibling;
-    if (headerTitle) headerTitle.innerText = "New Diary Log Entry";
+    const headerTitle = document.querySelector('#diaryModal h3');
+    if (headerTitle) headerTitle.innerText = 'New Diary Log Entry';
     
-    const submitBtn = document.querySelector('#diaryForm button[type="submit"]');
+    const submitBtn = document.querySelector('#diaryModal button[type="submit"]');
     if (submitBtn) {
-        submitBtn.innerText = "Publish Record";
-        submitBtn.className = "btn btn-success";
+        submitBtn.innerText = 'Publish Record';
+        submitBtn.className = 'btn btn-success';
     }
 
     const diaryScopeGroup = document.getElementById('diaryScope').closest('.form-group');
@@ -615,25 +772,174 @@ setupNotificationHandlers();
 function setupModalHandlers() {
     const diaryModal = document.getElementById('diaryModal');
     const photoModal = document.getElementById('photoModal');
+    const settingsModal = document.getElementById('settingsModal');
+    const usernameModal = document.getElementById('usernameModal');
+    const datesModal = document.getElementById('datesModal');
     const openDiary = document.getElementById('openDiaryModalBtn');
     const closeDiary = document.getElementById('closeDiaryModalBtn');
     const openPhoto = document.getElementById('openPhotoModalBtn');
     const closePhoto = document.getElementById('closePhotoModalBtn');
+    const settingsToggle = document.getElementById('settingsToggleBtn');
+    const closeSettings = document.getElementById('closeSettingsModalBtn');
+    const openUsernameBtn = document.getElementById('openChangeUsernameBtn');
+    const openDatesBtn = document.getElementById('openChangeDatesBtn');
+    const closeUsername = document.getElementById('closeUsernameModalBtn');
+    const closeDates = document.getElementById('closeDatesModalBtn');
+    const logoutSettingsBtn = document.getElementById('logoutSettingsBtn');
 
-    if (openDiary && diaryModal) openDiary.addEventListener('click', () => { diaryModal.style.display = 'flex'; });
+    if (openDiary && diaryModal) openDiary.addEventListener('click', () => {
+        clearDiaryFormWorkspaceState();
+        const headerTitle = document.querySelector('#diaryModal h3');
+        if (headerTitle) {
+            headerTitle.innerText = document.body.classList.contains('theme-lover') ? 'Send Love Letter' : 'New Diary Log Entry';
+        }
+        const submitBtn = document.querySelector('#diaryModal button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.innerText = 'Publish Record';
+            submitBtn.className = 'btn btn-success';
+        }
+        diaryModal.style.display = 'flex';
+    });
     if (closeDiary && diaryModal) closeDiary.addEventListener('click', () => { diaryModal.style.display = 'none'; });
+    const linkAccountBtn = document.getElementById('linkAccountBtn');
+    const linkAccountModal = document.getElementById('linkAccountModal');
+    const closeLinkAccount = document.getElementById('closeLinkAccountModalBtn');
+
     if (openPhoto && photoModal) openPhoto.addEventListener('click', () => { photoModal.style.display = 'flex'; });
     if (closePhoto && photoModal) closePhoto.addEventListener('click', () => { photoModal.style.display = 'none'; });
+    if (linkAccountBtn && linkAccountModal) linkAccountBtn.addEventListener('click', () => { linkAccountModal.style.display = 'flex'; });
+    if (closeLinkAccount && linkAccountModal) closeLinkAccount.addEventListener('click', () => { linkAccountModal.style.display = 'none'; });
+    if (settingsToggle && settingsModal) settingsToggle.addEventListener('click', async () => {
+        populateSettingsModal();
+        settingsModal.style.display = 'flex';
+    });
+    if (closeSettings && settingsModal) closeSettings.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+    if (openUsernameBtn && usernameModal) openUsernameBtn.addEventListener('click', () => {
+        usernameModal.style.display = 'flex';
+    });
+    if (openDatesBtn && datesModal) openDatesBtn.addEventListener('click', async () => {
+        await populateDatesModal();
+        datesModal.style.display = 'flex';
+    });
+    if (closeUsername && usernameModal) closeUsername.addEventListener('click', () => { usernameModal.style.display = 'none'; });
+    if (closeDates && datesModal) closeDates.addEventListener('click', () => { datesModal.style.display = 'none'; });
+    if (logoutSettingsBtn) logoutSettingsBtn.addEventListener('click', async () => {
+        try {
+            await fetch('/api/users/logout', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': localCsrfToken }
+            });
+        } catch (err) {
+            console.error('Logout failed:', err);
+        }
+        window.location.href = '/index.html';
+    });
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             if (diaryModal) diaryModal.style.display = 'none';
             if (photoModal) photoModal.style.display = 'none';
+            if (settingsModal) settingsModal.style.display = 'none';
+            if (usernameModal) usernameModal.style.display = 'none';
+            if (datesModal) datesModal.style.display = 'none';
+            if (linkAccountModal) linkAccountModal.style.display = 'none';
         }
     });
 }
 
 setupModalHandlers();
+
+async function populateSettingsModal() {
+    if (!currentUserContext) return;
+    const birthdayInput = document.getElementById('profileBirthdayInput');
+    const anniversaryInput = document.getElementById('profileAnniversaryInput');
+    const usernameInput = document.getElementById('newUsernameInput');
+    if (birthdayInput) birthdayInput.value = currentUserContext.birthday || '';
+    if (usernameInput) usernameInput.value = currentUserContext.username || '';
+    if (anniversaryInput && activeConnectionId) {
+        const detailRes = await fetch(`/api/connections/detail?connectionId=${activeConnectionId}`);
+        if (detailRes.ok) {
+            const detailData = await detailRes.json();
+            anniversaryInput.value = detailData.connection?.anniversary_date || '';
+        }
+    }
+}
+
+async function populateDatesModal() {
+    await populateSettingsModal();
+}
+
+const usernameForm = document.getElementById('usernameForm');
+if (usernameForm) {
+    usernameForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newUsername = document.getElementById('newUsernameInput').value.trim();
+        if (!newUsername) {
+            flashSystemMessage('Please enter a new username.', false);
+            return;
+        }
+        try {
+            const res = await fetch('/api/users/me', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+                body: JSON.stringify({ username: newUsername })
+            });
+            const outcome = await res.json();
+            if (res.ok) {
+                currentUserContext = outcome.user;
+                flashSystemMessage(outcome.message, true);
+                document.getElementById('userGreeting').innerText = `User: ${currentUserContext.username}`;
+                const homeUsernameEl = document.getElementById('homeUsername');
+                if (homeUsernameEl) homeUsernameEl.innerText = currentUserContext.username;
+                document.getElementById('usernameModal').style.display = 'none';
+            } else {
+                flashSystemMessage(outcome.error, false);
+            }
+        } catch (err) {
+            flashSystemMessage('Failed updating username.', false);
+        }
+    });
+}
+
+const datesForm = document.getElementById('datesForm');
+if (datesForm) {
+    datesForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const birthdayValue = document.getElementById('profileBirthdayInput').value || null;
+        const anniversaryValue = document.getElementById('profileAnniversaryInput').value || null;
+        try {
+            const userRes = await fetch('/api/users/me', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+                body: JSON.stringify({ birthday: birthdayValue })
+            });
+            const userOutcome = await userRes.json();
+            if (!userRes.ok) {
+                flashSystemMessage(userOutcome.error || 'Failed updating birthday.', false);
+                return;
+            }
+            currentUserContext = userOutcome.user;
+            let connectionOutcome = null;
+            if (anniversaryValue && activeConnectionId) {
+                const connRes = await fetch('/api/connections/update-dates', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+                    body: JSON.stringify({ anniversaryDate: anniversaryValue })
+                });
+                connectionOutcome = await connRes.json();
+                if (!connRes.ok) {
+                    flashSystemMessage(connectionOutcome.error || 'Failed updating anniversary.', false);
+                    return;
+                }
+            }
+            flashSystemMessage('Date settings saved successfully.', true);
+            document.getElementById('datesModal').style.display = 'none';
+            await renderConnectionCounters();
+        } catch (err) {
+            flashSystemMessage('Failed saving date settings.', false);
+        }
+    });
+}
 
 const photoForm = document.getElementById('photoForm');
 if (photoForm) {
@@ -662,6 +968,45 @@ if (photoForm) {
             }
         } catch (err) {
             flashSystemMessage('Upload failed.', false);
+        }
+    });
+}
+
+const linkAccountForm = document.getElementById('linkAccountForm');
+if (linkAccountForm) {
+    linkAccountForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!activeConnectionId) {
+            flashSystemMessage('Select a connection first.', false);
+            return;
+        }
+
+        const identifier = document.getElementById('linkAccountInput').value.trim();
+        if (!identifier) {
+            flashSystemMessage('Enter an email or username to link.', false);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/connections/link-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+                body: JSON.stringify({ connectionId: activeConnectionId, emailOrUsername: identifier })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                flashSystemMessage(result.message, true);
+                document.getElementById('linkAccountModal').style.display = 'none';
+                document.getElementById('linkAccountInput').value = '';
+                await loadActiveConnectionProfile(activeConnectionId);
+                await renderConnectionCounters();
+                await renderSharedGallery();
+            } else {
+                flashSystemMessage(result.error || 'Account linking failed.', false);
+            }
+        } catch (err) {
+            flashSystemMessage('Network failure while linking account.', false);
         }
     });
 }

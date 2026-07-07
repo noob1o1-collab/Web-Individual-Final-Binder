@@ -74,6 +74,27 @@
                 <div id="connectionList" class="connection-list">
                     no partner linked yet, check invite or search username of your loved one
                 </div>
+                <div id="sidebarSearchCard" class="panel" style="margin-top:1rem;">
+                    <h3 style="margin-top:0;">Search & Invite</h3>
+                    <form id="sidebarConnectForm">
+                        <div class="form-group">
+                            <label>Partner Username</label>
+                            <input type="text" id="sidebarTargetUsername" required placeholder="Search by username" />
+                        </div>
+                        <div class="form-group">
+                            <label>Relationship Type</label>
+                            <select id="sidebarRelationshipType">
+                                <option value="friend">Friend Shared Space</option>
+                                <option value="lover">Romantic Shared Space</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="sidebarAnniversaryContainer">
+                            <label>Anniversary Date (Optional)</label>
+                            <input type="date" id="sidebarAnniversaryDate">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%;">Search and request</button>
+                    </form>
+                </div>
             </aside>
 
             <main style="flex:1; min-width:320px;">
@@ -86,6 +107,7 @@
                         <h2>Space Partner Profile</h2>
                         <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
                         <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
+                        <button id="linkAccountBtn" class="btn btn-primary" style="display:none;">Link/Relink Account</button>
                         <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
                     </div>
                     <div class="panel" style="display:flex; gap:0.5rem; align-items:center; justify-content:flex-end;">
@@ -128,7 +150,7 @@
                             <option value="lover">Romantic Shared Space</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="anniversaryContainer">
                         <label>Anniversary Date (Optional)</label>
                         <input type="date" id="anniversaryDate">
                     </div>
@@ -137,62 +159,56 @@
             </div>
         </div>
 
-        <div class="workspace-shell">
-            <aside class="sidebar-panel">
-                <div class="sidebar-header">
-                    <h2>Switch Space</h2>
+        <button id="settingsToggleBtn" class="btn btn-primary" style="position: fixed; bottom: 20px; right: 20px; z-index: 999; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; padding: 0; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">⚙️</button>
+
+        <div id="settingsModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:520px; max-width:92%;">
+                <h3>Settings</h3>
+                <div style="display:flex; flex-direction:column; gap:0.9rem; margin-top:1rem;">
+                    <button id="openChangeUsernameBtn" class="btn btn-primary">Change Username</button>
+                    <button id="openChangeDatesBtn" class="btn btn-primary">Change Dates</button>
+                    <button id="logoutSettingsBtn" class="btn btn-danger">Log Out</button>
+                    <button type="button" id="closeSettingsModalBtn" class="btn btn-success">Close</button>
                 </div>
-                <div id="connectionList" class="connection-list">
-                    <div style="color:#a8a8b3;">Loading connections…</div>
-                </div>
-            </aside>
-                <section id="activeWorkspace" style="display:none; width:100%;">
-                    <div class="panel">
-                        <h2 id="activeSpaceHeader">Active Workspace</h2>
-                        <p id="activeSpaceSubheader" style="color:#a8a8b3; margin-top:0.75rem;"></p>
-                    </div>
-                    <div class="panel">
-                        <h2>Space Partner Profile</h2>
-                        <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
-                        <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
-                        <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
-                    </div>
-                    <div class="panel">
-                        <h2>New Diary Log Entry</h2>
-                        <form id="diaryForm" style="margin-top: 1rem;">
-                            <input type="hidden" id="editDiaryId" value="">
-                            <input type="hidden" id="editDiaryIsShared" value="">
-                            <div class="form-group">
-                                <label>Title</label>
-                                <input type="text" id="diaryTitle" required placeholder="A memorable title...">
-                            </div>
-                            <div class="form-group">
-                                <label>Detail Description Content</label>
-                                <textarea id="diaryDescription" rows="4" required placeholder="Document your thoughts..."></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>Choose Privacy Level</label>
-                                <select id="diaryScope">
-                                    <option value="false">Private Archive (Personal View Only)</option>
-                                    <option value="true">Shared Log (Visible to Partner)</option>
-                                </select>
-                            </div>
-                            <button type="submit" class="btn btn-success" style="width: 100%;">Publish Record</button>
-                        </form>
-                    </div>
-                    <div class="panel">
-                        <h2>Your Personal Diary</h2>
-                        <div id="personalFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
-                    </div>
-                    <div class="panel">
-                        <h2>Our Shared Journal</h2>
-                        <div id="sharedFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
-                    </div>
-                    
-                </section>
-            </main>
+            </div>
         </div>
-        
+
+        <div id="usernameModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:480px; max-width:90%;">
+                <h3>Change Username</h3>
+                <form id="usernameForm" style="margin-top:1rem; display:flex; flex-direction:column; gap:0.9rem;">
+                    <div class="form-group">
+                        <label>New Username</label>
+                        <input type="text" id="newUsernameInput" required placeholder="Enter your new username">
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="submit" class="btn btn-primary">Save Username</button>
+                        <button type="button" id="closeUsernameModalBtn" class="btn btn-danger">Close</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="datesModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:520px; max-width:92%;">
+                <h3>Change Dates</h3>
+                <form id="datesForm" style="margin-top:1rem; display:flex; flex-direction:column; gap:0.9rem;">
+                    <div class="form-group">
+                        <label>Birthday</label>
+                        <input type="date" id="profileBirthdayInput" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Space Anniversary</label>
+                        <input type="date" id="profileAnniversaryInput">
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="submit" class="btn btn-primary">Save Dates</button>
+                        <button type="button" id="closeDatesModalBtn" class="btn btn-danger">Close</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div id="diaryModal" class="modal-overlay">
             <div class="modal-content panel" style="width:560px; max-width:90%;">
                 <h3>New Diary Log Entry</h3>
@@ -238,17 +254,37 @@
             </div>
         </div>
 
+        <div id="linkAccountModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:480px; max-width:90%;">
+                <h3>Link Shared Space Account</h3>
+                <form id="linkAccountForm" style="margin-top:1rem; display:flex; flex-direction:column; gap:0.9rem;">
+                    <div class="form-group">
+                        <label>Partner Email or Username</label>
+                        <input type="text" id="linkAccountInput" required placeholder="Enter partner email or username" />
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="submit" class="btn btn-primary">Link Account</button>
+                        <button type="button" id="closeLinkAccountModalBtn" class="btn btn-danger">Close</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
     <style>
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; }
         .modal-content { border-radius: 8px; }
         .btn-purple { background: #8257e5; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; border: none; cursor: pointer; }
         .btn-pink { background: #ff79c6; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; border: none; cursor: pointer; }
         .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-        .gallery-grid img { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #29292e; }
+        .photo-card { position: relative; overflow: hidden; border-radius: 8px; }
+        .photo-card img { width: 100%; height: 120px; object-fit: cover; display: block; border-radius: 8px; border: 1px solid #29292e; }
+        .photo-card button.photo-delete-btn { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; background: rgba(0,0,0,0.65); color: #ff7b7b; border: none; border-radius: 50%; cursor: pointer; box-shadow: 0 8px 16px rgba(0,0,0,0.35); }
         .theme-lover h1, .theme-lover h2, .theme-lover .badge { color: #ff79c6; }
-        .theme-lover .sidebar-panel { border-color: #ff79c6; }
-        .theme-lover .connection-item.active { border-color: #ff79c6; }
-        .theme-lover .btn-primary { background: #ff79c6; }
+        .theme-lover .sidebar-panel { border-color: #ff79c6; box-shadow: 0 8px 24px rgba(255,121,198,0.06); }
+        .theme-lover .connection-item.active { border-color: #ff79c6; box-shadow: 0 6px 18px rgba(255,121,198,0.04); }
+        .theme-lover .btn-primary, .theme-lover .btn-purple { background: #ff79c6; }
+        .theme-lover .countdown-ticker { border-left-color: #ff79c6; }
+        .theme-lover .countdown-ticker::after { content: ' ❤️'; margin-left: 0.5rem; }
     </style>
 
     <script src="portal.js"></script>
