@@ -1,5 +1,8 @@
 let localCsrfToken = "";
 let currentUserContext = null;
+let gamePollingIntervalId = null;
+let clientGameSymbol = " ";
+let isMyTurnToken = false;
 
 function flashSystemMessage(msg, isSuccess = true) {
     const banner = document.getElementById('portalMessage');
@@ -220,7 +223,7 @@ async function renderPersonalFeedList() {
             feed.innerHTML = '<p style="color:#a8a8b3; font-size:0.9rem;">Private archive is empty.</p>';
             return;
         }
-        
+
         const escapeHtml = (str) => str.replace(/"/g, '&quot;');
 
         feed.innerHTML = data.logs.map(log => `
@@ -281,10 +284,14 @@ if (diaryForm) {
         e.preventDefault();
    
         const targetEditId = document.getElementById('editDiaryId').value;
+        const isSharedValue = targetEditId
+            ? document.getElementById('editDiaryIsShared').value === 'true'
+            : document.getElementById('diaryScope').value === 'true';
+
         const payload = {
             title: document.getElementById('diaryTitle').value.trim(),
             description: document.getElementById('diaryDescription').value.trim(),
-            isShared: document.getElementById('diaryScope').value === 'true'
+            isShared: isSharedValue
         };
 
         const requestUrl = targetEditId ? `/api/diaries/edit/${targetEditId}` : '/api/diaries/add';
@@ -300,7 +307,7 @@ if (diaryForm) {
 
             if (res.ok) {
                 flashSystemMessage(output.message, true);
-                clearDiaryFormWorkspaceState();
+                clearDiaryFormWorkspaceState(); // Resets layout parameters cleanly
                 await Promise.all([renderPersonalFeedList(), renderSharedFeedList()]);
             } else {
                 flashSystemMessage(output.error, false);
@@ -356,6 +363,7 @@ function prepareLogEditHook(diaryId) {
     const isShared = card.getAttribute('data-shared');
 
     document.getElementById('editDiaryId').value = diaryId;
+    document.getElementById('editDiaryIsShared').value = isShared;
     document.getElementById('diaryTitle').value = title;
     document.getElementById('diaryDescription').value = description;
     document.getElementById('diaryScope').value = isShared;
@@ -393,6 +401,7 @@ function prepareLogEditHook(diaryId) {
 
 function clearDiaryFormWorkspaceState() {
     document.getElementById('editDiaryId').value = '';
+    document.getElementById('editDiaryIsShared').value = '';
     document.getElementById('diaryForm').reset();
     
     const headerTitle = document.querySelector('#diaryForm').previousElementSibling;
@@ -414,4 +423,138 @@ function clearDiaryFormWorkspaceState() {
     if (cancelBtn) cancelBtn.remove();
 }
 
+async function syncGameStateRoutine() {
+    try {
+        const res = await fetch('/api/games/state');
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const { game, playerSymbol, currentUserId } = data;
+
+        clientGameSymbol = playerSymbol;
+        const userSymbolDisplay = document.getElementById('userSymbolDisplay');
+        if (userSymbolDisplay) {
+            userSymbolDisplay.innerText = playerSymbol;
+        }
+
+        const cells = document.querySelectorAll('.game-cell');
+        if (!cells.length) return;
+
+        const boardState = game.board.split('');
+        boardState.forEach((symbol, index) => {
+            const cell = cells[index];
+            if (!cell) return;
+            cell.innerText = symbol !== ' ' ? symbol : '';
+            cell.setAttribute('data-symbol', symbol);
+            if (symbol !== ' ') {
+                cell.classList.add('taken');
+            } else {
+                cell.classList.remove('taken');
+            }
+        });
+
+        const turnIndicator = document.getElementById('gameTurnIndicator');
+        if (!turnIndicator) return;
+
+        if (game.status === 'won') {
+            if (game.winner_id === currentUserId) {
+                turnIndicator.innerText = '🏆 Victory Achieved!';
+                turnIndicator.style.background = 'rgba(4, 211, 97, 0.2)';
+                turnIndicator.style.color = '#04d361';
+            } else {
+                turnIndicator.innerText = '🚨 Defeat Recorded.';
+                turnIndicator.style.background = 'rgba(247, 90, 90, 0.2)';
+                turnIndicator.style.color = '#f75a5a';
+            }
+            isMyTurnToken = false;
+        } else if (game.status === 'draw') {
+            turnIndicator.innerText = '🤝 Matrix Stagnated (Draw)';
+            turnIndicator.style.background = '#323238';
+            turnIndicator.style.color = '#a8a8b3';
+            isMyTurnToken = false;
+        } else if (game.turn_user_id === currentUserId) {
+            turnIndicator.innerText = '⚡ Your Strategic Turn';
+            turnIndicator.style.background = '#04d361';
+            turnIndicator.style.color = '#121214';
+            isMyTurnToken = true;
+        } else {
+            turnIndicator.innerText = '⏳ Partner Calculating Move...';
+            turnIndicator.style.background = '#29292e';
+            turnIndicator.style.color = '#a8a8b3';
+            isMyTurnToken = false;
+        }
+    } catch (err) {
+        console.error('Game sync routine telemetry failure:', err);
+    }
+}
+
+async function executeCellClickMove(cellIndex) {
+    if (!isMyTurnToken) {
+        flashSystemMessage('Negative payload. Wait for your active tactical sync turn.', false);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/games/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
+            body: JSON.stringify({ cellIndex })
+        });
+        const output = await res.json();
+
+        if (res.ok) {
+            await syncGameStateRoutine();
+        } else {
+            flashSystemMessage(output.error, false);
+        }
+    } catch (err) {
+        flashSystemMessage('Network connection breakdown passing game turn coordinates.', false);
+    }
+}
+
+async function executeGameResetSequence() {
+    if (!confirm('Are you certain you want to clear the active board state?')) return;
+
+    try {
+        const res = await fetch('/api/games/reset', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': localCsrfToken }
+        });
+        if (res.ok) {
+            flashSystemMessage('Game board configuration re-initialized.', true);
+            await syncGameStateRoutine();
+        }
+    } catch (err) {
+        flashSystemMessage('Failed executing reset matrix command routing.', false);
+    }
+}
+
+function initializeGameClickListeners() {
+    const board = document.getElementById('gameBoard');
+    const resetBtn = document.getElementById('resetGameBtn');
+
+    if (!board || !resetBtn) return;
+
+    board.onclick = (e) => {
+        const cell = e.target.closest('.game-cell');
+        if (!cell) return;
+        const cellIndex = parseInt(cell.getAttribute('data-index'));
+        executeCellClickMove(cellIndex);
+    };
+
+    resetBtn.onclick = executeGameResetSequence;
+}
+
+function startGamePolling() {
+    if (gamePollingIntervalId) clearInterval(gamePollingIntervalId);
+    syncGameStateRoutine();
+    gamePollingIntervalId = setInterval(syncGameStateRoutine, 3000);
+}
+
+function initializeGameLoop() {
+    initializeGameClickListeners();
+    startGamePolling();
+}
+
 runDashboardLifecycleBootstrap();
+initializeGameLoop();
