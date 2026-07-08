@@ -42,8 +42,17 @@
     <div class="dashboard-wrapper">
         <header>
             <h1>Space<span>Binder</span> Workspace</h1>
-            <div>
+            <div style="display:flex; align-items:center; gap:1rem;">
                 <span id="userGreeting" style="margin-right: 1rem; font-weight: bold;">Loading identity...</span>
+                <div id="notifWrapper" style="position:relative;">
+                    <button id="notifButton" class="btn" style="background:#29292e; color:#fff; border-radius:6px; padding:0.4rem 0.6rem;">
+                        🔔 <span id="notifBadge" style="display:none; background:#f75a5a; color:#fff; padding:0.1rem 0.4rem; border-radius:999px; font-weight:bold; margin-left:6px; font-size:0.8rem;">0</span>
+                    </button>
+                    <div id="notifDropdown" style="display:none; position:absolute; right:0; margin-top:0.5rem; background:#121214; border:1px solid #29292e; border-radius:6px; padding:0.75rem; width:320px; z-index:1000;">
+                        <h4 style="margin:0 0 0.5rem 0;">Pending Requests</h4>
+                        <div id="pendingRequestsList" style="max-height:300px; overflow:auto; color:#a8a8b3;">Checking for pending space invites...</div>
+                    </div>
+                </div>
                 <button class="btn btn-danger" id="logoutBtn">Exit Session</button>
             </div>
         </header>
@@ -78,8 +87,8 @@
 
             <div class="panel">
                 <h2>Incoming Invitations</h2>
-                <div id="pendingRequestsList" style="margin-top: 1.5rem; color: #a8a8b3;">
-                    Checking for pending space invites...
+                <div style="margin-top: 1.5rem; color: #a8a8b3;">
+                    Pending invitation details are available from the notification bell in the header.
                 </div>
             </div>
         </div>
