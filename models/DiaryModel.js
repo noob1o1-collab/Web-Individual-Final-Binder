@@ -79,7 +79,6 @@ const deleteEntry = async (diaryId) => {
     }
 };
 
-// Modify an existing diary entry row if the current user owns it
 const updateDiaryEntry = async (diaryId, title, description, isShared, userId) => {
     try {
         const query = `
