@@ -138,7 +138,7 @@ async function loadPendingInvitationsList() {
         const data = await res.json();
 
         if (!data.pendingRequests || data.pendingRequests.length === 0) {
-            container.innerText = 'No inbound connection requests currently awaiting review.';
+            container.innerText = 'No invitations sent yet, Check later.';
             return;
         }
 
@@ -201,7 +201,7 @@ if (connectForm) {
                 flashSystemMessage(output.error, false);
             }
         } catch (err) {
-            flashSystemMessage('Network failure establishing tracking request vector.', false);
+            flashSystemMessage('Network failure.', false);
         }
     });
 }
@@ -256,7 +256,7 @@ async function renderSharedFeedList() {
         }
 
         if (!data.logs || data.logs.length === 0) {
-            feed.innerHTML = '<p style="color:#a8a8b3; font-size:0.9rem;">Collaborative shared ledger is empty.</p>';
+            feed.innerHTML = '<p style="color:#a8a8b3; font-size:0.9rem;">Shared diary is empty.</p>';
             return;
         }
 
@@ -307,7 +307,7 @@ if (diaryForm) {
 
             if (res.ok) {
                 flashSystemMessage(output.message, true);
-                clearDiaryFormWorkspaceState(); // Resets layout parameters cleanly
+                clearDiaryFormWorkspaceState();
                 await Promise.all([renderPersonalFeedList(), renderSharedFeedList()]);
             } else {
                 flashSystemMessage(output.error, false);
