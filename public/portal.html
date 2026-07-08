@@ -97,6 +97,7 @@
                     <h2>New Diary Log Entry</h2>
                     <form id="diaryForm" style="margin-top: 1rem;">
                         <input type="hidden" id="editDiaryId" value="">
+                        <input type="hidden" id="editDiaryIsShared" value="">
                         <div class="form-group">
                             <label>Title</label>
                             <input type="text" id="diaryTitle" required placeholder="A memorable title...">
@@ -130,7 +131,35 @@
             </div>
             
         </div>
-        
+        <div class="portal-card full-width" style="margin-top: 2rem;">
+                <div class="card-header">
+                    <h2>🎮 Shared Space Arcade: Retro Tic-Tac-Toe</h2>
+                    <span id="gameTurnIndicator" class="badge">Loading game ...</span>
+                </div>
+                
+                <div class="game-container" style="display: flex; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                    <div id="gameBoard" class="game-board-grid">
+                        <div class="game-cell" data-index="0"></div>
+                        <div class="game-cell" data-index="1"></div>
+                        <div class="game-cell" data-index="2"></div>
+                        <div class="game-cell" data-index="3"></div>
+                        <div class="game-cell" data-index="4"></div>
+                        <div class="game-cell" data-index="5"></div>
+                        <div class="game-cell" data-index="6"></div>
+                        <div class="game-cell" data-index="7"></div>
+                        <div class="game-cell" data-index="8"></div>
+                    </div>
+
+                    <div class="game-status-panel" style="flex: 1; min-width: 250px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <p style="margin-bottom: 0.5rem;">Your Assignment Symbol: <strong id="userSymbolDisplay" style="color: #4da6ff; font-size: 1.2rem;">-</strong></p>
+                            <p style="font-size: 0.9rem; color: #a8a8b3; line-height: 1.4;">
+                                <strong>Rules:</strong> Player 1 (Space Inviter) operates as <span style="color:#f75a5a; font-weight:bold;">X</span>. Player 2 (Recipient) operates as <span style="color:#4da6ff; font-weight:bold;">O</span>.
+                            </p>
+                        </div>
+                        <button id="resetGameBtn" class="btn btn-danger" style="margin-top: 1rem; width: 100%;">🔄 Reset Board Matrix</button>
+                    </div>
+                </div>
     </div>
 
     <script src="portal.js"></script>
