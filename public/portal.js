@@ -220,13 +220,18 @@ async function renderPersonalFeedList() {
             feed.innerHTML = '<p style="color:#a8a8b3; font-size:0.9rem;">Private archive is empty.</p>';
             return;
         }
+        
+        const escapeHtml = (str) => str.replace(/"/g, '&quot;');
 
         feed.innerHTML = data.logs.map(log => `
-            <div class="diary-card">
+            <div class="diary-card" id="diary-card-${log.did}" data-title="${escapeHtml(log.title)}" data-description="${escapeHtml(log.description)}" data-shared="${log.is_shared}">
                 <h3>${log.title}</h3>
                 <p style="margin:0.5rem 0; font-size:0.95rem; line-height:1.4;">${log.description}</p>
                 <small style="color:#a8a8b3;">Recorded: ${new Date(log.created_at).toLocaleDateString()}</small>
-                <button class="delete-btn" onclick="triggerLogPurgeHook(${log.did})">🗑️ Delete</button>
+                <div style="margin-top: 0.75rem;">
+                    <button class="btn btn-primary" style="padding: 0.3rem 0.7rem; font-size: 0.8rem; margin-right: 0.5rem;" onclick="prepareLogEditHook(${log.did})">✏️ Edit</button>
+                    <button class="delete-btn" style="position: static;" onclick="triggerLogPurgeHook(${log.did})">🗑️ Delete</button>
+                </div>
             </div>
         `).join('');
     } catch (err) {
@@ -252,12 +257,17 @@ async function renderSharedFeedList() {
             return;
         }
 
+        const escapeHtml = (str) => str.replace(/"/g, '&quot;');
+
         feed.innerHTML = data.logs.map(log => `
-            <div class="diary-card">
+            <div class="diary-card" id="diary-card-${log.did}" data-title="${escapeHtml(log.title)}" data-description="${escapeHtml(log.description)}" data-shared="${log.is_shared}">
                 <h3>${log.title}</h3>
                 <p style="margin:0.5rem 0; font-size:0.95rem; line-height:1.4;">${log.description}</p>
                 <small style="color:#a8a8b3;">Author: <strong>${log.creator_username}</strong> | ${new Date(log.created_at).toLocaleDateString()}</small>
-                <button class="delete-btn" onclick="triggerLogPurgeHook(${log.did})">🗑️ Delete</button>
+                <div style="margin-top: 0.75rem;">
+                    <button class="btn btn-primary" style="padding: 0.3rem 0.7rem; font-size: 0.8rem; margin-right: 0.5rem;" onclick="prepareLogEditHook(${log.did})">✏️ Edit</button>
+                    <button class="delete-btn" style="position: static;" onclick="triggerLogPurgeHook(${log.did})">🗑️ Delete</button>
+                </div>
             </div>
         `).join('');
     } catch (err) {
@@ -269,15 +279,20 @@ const diaryForm = document.getElementById('diaryForm');
 if (diaryForm) {
     diaryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+   
+        const targetEditId = document.getElementById('editDiaryId').value;
         const payload = {
             title: document.getElementById('diaryTitle').value.trim(),
             description: document.getElementById('diaryDescription').value.trim(),
             isShared: document.getElementById('diaryScope').value === 'true'
         };
 
+        const requestUrl = targetEditId ? `/api/diaries/edit/${targetEditId}` : '/api/diaries/add';
+        const requestMethod = targetEditId ? 'PUT' : 'POST';
+
         try {
-            const res = await fetch('/api/diaries/add', {
-                method: 'POST',
+            const res = await fetch(requestUrl, {
+                method: requestMethod,
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
                 body: JSON.stringify(payload)
             });
@@ -285,13 +300,13 @@ if (diaryForm) {
 
             if (res.ok) {
                 flashSystemMessage(output.message, true);
-                diaryForm.reset();
+                clearDiaryFormWorkspaceState();
                 await Promise.all([renderPersonalFeedList(), renderSharedFeedList()]);
             } else {
                 flashSystemMessage(output.error, false);
             }
         } catch (err) {
-            flashSystemMessage('Network runtime failure logging entry row.', false);
+            flashSystemMessage('Network runtime failure handling diary entry stream manipulation.', false);
         }
     });
 }
@@ -330,6 +345,73 @@ if (logoutBtn) {
             console.error('Logout processing failure:', err);
         }
     });
+}
+
+function prepareLogEditHook(diaryId) {
+    const card = document.getElementById(`diary-card-${diaryId}`);
+    if (!card) return;
+
+    const title = card.getAttribute('data-title');
+    const description = card.getAttribute('data-description');
+    const isShared = card.getAttribute('data-shared');
+
+    document.getElementById('editDiaryId').value = diaryId;
+    document.getElementById('diaryTitle').value = title;
+    document.getElementById('diaryDescription').value = description;
+    document.getElementById('diaryScope').value = isShared;
+
+    const diaryScopeGroup = document.getElementById('diaryScope').closest('.form-group');
+    if (diaryScopeGroup) {
+        diaryScopeGroup.style.display = 'none';
+    }
+    document.getElementById('diaryScope').disabled = true;
+
+    const headerTitle = document.querySelector('#diaryForm').previousElementSibling;
+    if (headerTitle) headerTitle.innerText = "✏️ Edit Diary Log Entry";
+    
+    const submitBtn = document.querySelector('#diaryForm button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.innerText = "Save Modifications Vector";
+        submitBtn.className = "btn btn-primary";
+    }
+    
+    if (!document.getElementById('cancelEditBtn')) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.id = 'cancelEditBtn';
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-danger';
+        cancelBtn.style.marginTop = '0.5rem';
+        cancelBtn.style.width = '100%';
+        cancelBtn.innerText = '🚫 Cancel Form Modification';
+        cancelBtn.onclick = clearDiaryFormWorkspaceState;
+        document.getElementById('diaryForm').appendChild(cancelBtn);
+    }
+    
+    document.getElementById('diaryTitle').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('diaryTitle').focus();
+}
+
+function clearDiaryFormWorkspaceState() {
+    document.getElementById('editDiaryId').value = '';
+    document.getElementById('diaryForm').reset();
+    
+    const headerTitle = document.querySelector('#diaryForm').previousElementSibling;
+    if (headerTitle) headerTitle.innerText = "New Diary Log Entry";
+    
+    const submitBtn = document.querySelector('#diaryForm button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.innerText = "Publish Record";
+        submitBtn.className = "btn btn-success";
+    }
+
+    const diaryScopeGroup = document.getElementById('diaryScope').closest('.form-group');
+    if (diaryScopeGroup) {
+        diaryScopeGroup.style.display = 'block';
+    }
+    document.getElementById('diaryScope').disabled = false;
+    
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (cancelBtn) cancelBtn.remove();
 }
 
 runDashboardLifecycleBootstrap();
