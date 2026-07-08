@@ -79,6 +79,7 @@ const deleteEntry = async (diaryId) => {
     }
 };
 
+// Modify an existing diary entry row if the current user owns it
 const updateDiaryEntry = async (diaryId, title, description, isShared, userId) => {
     try {
         const query = `
@@ -95,11 +96,33 @@ const updateDiaryEntry = async (diaryId, title, description, isShared, userId) =
     }
 };
 
+const updateSharedDiaryEntry = async (diaryId, title, description, isShared, editorId) => {
+    try {
+        const query = `
+            UPDATE diaries d
+            SET title = $1, description = $2, is_shared = $3
+            FROM connections c
+            WHERE d.did = $4
+              AND d.is_shared = TRUE
+              AND c.status = 'accepted'
+              AND ((c.sender_id = d.creator AND c.receiver_id = $5)
+                   OR (c.receiver_id = d.creator AND c.sender_id = $5))
+            RETURNING d.*
+        `;
+        const result = await db.query(query, [title, description, isShared, diaryId, editorId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Database shared diary update failure:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     createEntry,
     getPersonalEntries,
     getSharedEntries,
     getEntryById,
     deleteEntry,
-    updateDiaryEntry
+    updateDiaryEntry,
+    updateSharedDiaryEntry
 };
