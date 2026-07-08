@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 router.post('/add', authMiddleware, diaryController.addDiaryEntry);
 router.get('/personal', authMiddleware, diaryController.fetchPersonalSpace);
 router.get('/shared', authMiddleware, diaryController.fetchSharedSpace);
+router.put('/edit/:id', authMiddleware, diaryController.editDiaryEntry);
 router.delete('/delete/:id', authMiddleware, diaryController.eraseDiaryEntry);
 
 module.exports = router;
