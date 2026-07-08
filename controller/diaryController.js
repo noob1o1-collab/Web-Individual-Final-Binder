@@ -73,13 +73,41 @@ exports.eraseDiaryEntry = async (req, res) => {
 exports.editDiaryEntry = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, isShared } = req.body;
+        const { title, description } = req.body;
         const userId = req.user.id;
 
-        const updatedEntry = await DiaryModel.updateDiaryEntry(id, title, description, isShared, userId);
-        
-        if (!updatedEntry) {
-            return res.status(403).json({ error: 'Unauthorized operation. You can only edit your own diary logs.' });
+        const targetEntry = await DiaryModel.getEntryById(id);
+        if (!targetEntry) {
+            return res.status(404).json({ error: 'Diary entry not found.' });
+        }
+
+        let updatedEntry;
+
+        if (targetEntry.creator !== userId) {
+            if (!targetEntry.is_shared) {
+                return res.status(403).json({ error: 'Unauthorized operation. You can only edit your own diary logs.' });
+            }
+
+            const activeLink = await ConnectionModel.getActiveConnection(userId);
+            if (!activeLink || (targetEntry.creator !== activeLink.sender_id && targetEntry.creator !== activeLink.receiver_id)) {
+                return res.status(403).json({ error: 'Unauthorized operation. You can only edit shared entries within your accepted connection.' });
+            }
+
+            updatedEntry = await DiaryModel.updateSharedDiaryEntry(
+                id,
+                title || targetEntry.title,
+                description || targetEntry.description,
+                targetEntry.is_shared,
+                userId
+            );
+        } else {
+            updatedEntry = await DiaryModel.updateDiaryEntry(
+                id,
+                title || targetEntry.title,
+                description || targetEntry.description,
+                targetEntry.is_shared,
+                userId
+            );
         }
 
         return res.json({ message: 'Diary entry updated successfully!', log: updatedEntry });
