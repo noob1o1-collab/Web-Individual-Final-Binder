@@ -69,3 +69,22 @@ exports.eraseDiaryEntry = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error executing deletion sequence.' });
     }
 };
+
+exports.editDiaryEntry = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, description, isShared } = req.body;
+        const userId = req.user.id;
+
+        const updatedEntry = await DiaryModel.updateDiaryEntry(id, title, description, isShared, userId);
+        
+        if (!updatedEntry) {
+            return res.status(403).json({ error: 'Unauthorized operation. You can only edit your own diary logs.' });
+        }
+
+        return res.json({ message: 'Diary entry updated successfully!', log: updatedEntry });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error during diary modification.' });
+    }
+};
