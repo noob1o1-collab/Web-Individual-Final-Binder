@@ -79,10 +79,27 @@ const deleteEntry = async (diaryId) => {
     }
 };
 
+const updateDiaryEntry = async (diaryId, title, description, isShared, userId) => {
+    try {
+        const query = `
+            UPDATE diaries 
+            SET title = $1, description = $2, is_shared = $3 
+            WHERE did = $4 AND creator = $5
+            RETURNING *
+        `;
+        const result = await db.query(query, [title, description, isShared, diaryId, userId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('Database diary update failure:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     createEntry,
     getPersonalEntries,
     getSharedEntries,
     getEntryById,
-    deleteEntry
+    deleteEntry,
+    updateDiaryEntry
 };
