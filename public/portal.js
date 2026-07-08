@@ -131,18 +131,28 @@ async function determineRelationshipSpaceParadigm() {
 
 async function loadPendingInvitationsList() {
     const container = document.getElementById('pendingRequestsList');
+    const badge = document.getElementById('notifBadge');
     if (!container) return;
 
     try {
         const res = await fetch('/api/connections/pending');
         const data = await res.json();
+        const list = data.pendingRequests || [];
+        list.sort((a, b) => {
+            const da = new Date(a.created_at || 0).getTime();
+            const db = new Date(b.created_at || 0).getTime();
+            return db - da;
+        });
 
-        if (!data.pendingRequests || data.pendingRequests.length === 0) {
+        if (!list.length) {
             container.innerText = 'No invitations sent yet, Check later.';
+            if (badge) { badge.style.display = 'none'; badge.innerText = '0'; }
             return;
         }
 
-        container.innerHTML = data.pendingRequests.map(req => `
+        if (badge) { badge.style.display = 'inline-block'; badge.innerText = String(list.length); }
+
+        container.innerHTML = list.map(req => `
             <div class="request-item">
                 <strong>From:</strong> ${req.sender_username} <br>
                 <strong>Type:</strong> <span class="badge">${req.relationship_type}</span>
@@ -154,6 +164,7 @@ async function loadPendingInvitationsList() {
         `).join('');
     } catch (err) {
         container.innerText = 'Error extracting list records.';
+        if (badge) { badge.style.display = 'none'; badge.innerText = '0'; }
     }
 }
 
@@ -167,12 +178,13 @@ async function resolveRequestHook(connectionId, actionType) {
 
         if (res.ok) {
             flashSystemMessage(outcome.message, true);
+            await loadPendingInvitationsList();
             await determineRelationshipSpaceParadigm();
         } else {
             flashSystemMessage(outcome.error, false);
         }
     } catch (err) {
-        flashSystemMessage('Network execution error resolving request block.', false);
+        flashSystemMessage('Network failure.', false);
     }
 }
 
@@ -201,7 +213,7 @@ if (connectForm) {
                 flashSystemMessage(output.error, false);
             }
         } catch (err) {
-            flashSystemMessage('Network failure.', false);
+            flashSystemMessage('Network failure establishing tracking request vector.', false);
         }
     });
 }
@@ -558,3 +570,34 @@ function initializeGameLoop() {
 
 runDashboardLifecycleBootstrap();
 initializeGameLoop();
+
+function setupNotificationHandlers() {
+    const btn = document.getElementById('notifButton');
+    const dropdown = document.getElementById('notifDropdown');
+    if (!btn || !dropdown) return;
+
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const isOpen = dropdown.style.display === 'block';
+        if (isOpen) {
+            dropdown.style.display = 'none';
+        } else {
+            await loadPendingInvitationsList();
+            dropdown.style.display = 'block';
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+setupNotificationHandlers();
