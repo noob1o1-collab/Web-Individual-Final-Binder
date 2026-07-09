@@ -14,8 +14,19 @@
         .btn-danger { background: #f75a5a; color: #fff; }
         .btn-primary { background: #8257e5; color: #fff; }
         .btn-success { background: #04d361; color: #fff; }
-        .grid-layout { display: grid; grid-template-columns: 1fr; gap: 2rem; }
-        @media(min-width: 768px) { .grid-layout { grid-template-columns: 1fr 1fr; } }
+        .workspace-shell { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; }
+        .sidebar-panel { width: 280px; min-width: 240px; background: #18181b; border: 1px solid #29292e; border-radius: 10px; padding: 1.25rem; box-shadow: 0 16px 40px rgba(0,0,0,0.12); }
+        .sidebar-header { margin-bottom: 1rem; border-bottom: 1px solid #29292e; padding-bottom: 0.75rem; }
+        .connection-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .connection-item { display: flex; flex-direction: column; gap: 0.25rem; background: #121214; border: 1px solid #29292e; border-radius: 10px; padding: 0.9rem 1rem; cursor: pointer; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+        .connection-item:hover { transform: translateX(2px); border-color: #8257e5; }
+        .connection-item.active { background: linear-gradient(135deg,#29292e,#1a1a1d); border-color: #8257e5; }
+        .connection-item strong { font-size: 1rem; color: #fff; }
+        .connection-item span { font-size: .88rem; color: #a8a8b3; }
+        .main-panel { flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 1.5rem; }
+        .welcome-card { padding: 2rem; text-align: center; border-radius: 12px; background: linear-gradient(180deg,#1e1e24,#121214); border: 1px solid #29292e; }
+        .welcome-card h2 { font-size: 2.1rem; margin-bottom: 0.5rem; }
+        @media(max-width: 980px) { .workspace-shell { flex-direction: column; } .sidebar-panel { width: 100%; } }
         .panel { background: #202024; border-radius: 6px; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); border: 1px solid #29292e; }
         .form-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.4rem; color: #a8a8b3; font-size: 0.9rem; }
@@ -29,12 +40,6 @@
         .portal-card { background: #202024; border-radius: 6px; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); border: 1px solid #29292e; }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
         .full-width { grid-column: 1 / -1; }
-        .game-board-grid { display: grid; grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); gap: 8px; background-color: #202024; padding: 8px; border-radius: 8px; border: 1px solid #323238; }
-        .game-cell { background-color: #121214; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: bold; color: #e1e1e6; cursor: pointer; transition: background 0.2s, transform 0.1s; }
-        .game-cell:hover { background-color: #29292e; }
-        .game-cell.taken { cursor: not-allowed; }
-        .game-cell[data-symbol="X"] { color: #f75a5a; }
-        .game-cell[data-symbol="O"] { color: #4da6ff; }
     </style>
 </head>
 <body>
@@ -57,9 +62,55 @@
             </div>
         </header>
 
+        <div id="welcomeCard" class="welcome-card" style="margin-top:1rem;">
+            <h2>Hi welcome <span id="homeUsername"></span></h2>
+        </div>
+
+        <div class="workspace-shell" style="display:flex; gap:2rem; margin-top:1.25rem;">
+            <aside class="sidebar-panel" style="width:320px; min-width:260px;">
+                <div class="sidebar-header">
+                    <h2>Switch Space</h2>
+                </div>
+                <div id="connectionList" class="connection-list">
+                    no partner linked yet, check invite or search username of your loved one
+                </div>
+            </aside>
+
+            <main style="flex:1; min-width:320px;">
+                <section id="activeWorkspace" style="display:none;">
+                    <div class="panel">
+                        <h2 id="activeSpaceHeader">Active Workspace</h2>
+                        <p id="activeSpaceSubheader" style="color:#a8a8b3; margin-top:0.75rem;"></p>
+                    </div>
+                    <div class="panel">
+                        <h2>Space Partner Profile</h2>
+                        <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
+                        <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
+                        <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
+                    </div>
+                    <div class="panel" style="display:flex; gap:0.5rem; align-items:center; justify-content:flex-end;">
+                        <button id="openDiaryModalBtn" class="btn btn-purple">Add Notes</button>
+                        <button id="openPhotoModalBtn" class="btn btn-pink">Upload Picture</button>
+                    </div>
+                    <div class="panel">
+                        <h2>Your Personal Diary</h2>
+                        <div id="personalFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Our Shared Journal</h2>
+                        <div id="sharedFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Our Shared Gallery</h2>
+                        <div id="sharedGallery" class="gallery-grid" style="margin-top:1rem;"></div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
         <div id="portalMessage" style="padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; display: none; text-align: center; font-weight: bold;"></div>
 
-        <div id="unconnectedView" class="grid-layout" style="display: none;">
+        <div id="unconnectedView" style="display: none;">
             <div class="panel">
                 <h2>Find Friend/Loved one</h2>
                 <p style="color: #a8a8b3; font-size: 0.9rem; line-height: 1.4; margin: 0.5rem 0 1.5rem 0;">
@@ -84,92 +135,121 @@
                     <button type="submit" class="btn btn-primary" style="width: 100%;">search and request</button>
                 </form>
             </div>
+        </div>
 
-            <div class="panel">
-                <h2>Incoming Invitations</h2>
-                <div style="margin-top: 1.5rem; color: #a8a8b3;">
-                    Pending invitation details are available from the notification bell in the header.
+        <div class="workspace-shell">
+            <aside class="sidebar-panel">
+                <div class="sidebar-header">
+                    <h2>Switch Space</h2>
                 </div>
+                <div id="connectionList" class="connection-list">
+                    <div style="color:#a8a8b3;">Loading connections…</div>
+                </div>
+            </aside>
+                <section id="activeWorkspace" style="display:none; width:100%;">
+                    <div class="panel">
+                        <h2 id="activeSpaceHeader">Active Workspace</h2>
+                        <p id="activeSpaceSubheader" style="color:#a8a8b3; margin-top:0.75rem;"></p>
+                    </div>
+                    <div class="panel">
+                        <h2>Space Partner Profile</h2>
+                        <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
+                        <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
+                        <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>New Diary Log Entry</h2>
+                        <form id="diaryForm" style="margin-top: 1rem;">
+                            <input type="hidden" id="editDiaryId" value="">
+                            <input type="hidden" id="editDiaryIsShared" value="">
+                            <div class="form-group">
+                                <label>Title</label>
+                                <input type="text" id="diaryTitle" required placeholder="A memorable title...">
+                            </div>
+                            <div class="form-group">
+                                <label>Detail Description Content</label>
+                                <textarea id="diaryDescription" rows="4" required placeholder="Document your thoughts..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Choose Privacy Level</label>
+                                <select id="diaryScope">
+                                    <option value="false">Private Archive (Personal View Only)</option>
+                                    <option value="true">Shared Log (Visible to Partner)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success" style="width: 100%;">Publish Record</button>
+                        </form>
+                    </div>
+                    <div class="panel">
+                        <h2>Your Personal Diary</h2>
+                        <div id="personalFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Our Shared Journal</h2>
+                        <div id="sharedFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
+                    </div>
+                    
+                </section>
+            </main>
+        </div>
+        
+        <div id="diaryModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:560px; max-width:90%;">
+                <h3>New Diary Log Entry</h3>
+                <form id="diaryForm" style="margin-top:1rem;">
+                    <input type="hidden" id="editDiaryId" value="">
+                    <input type="hidden" id="editDiaryIsShared" value="">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="diaryTitle" required placeholder="A memorable title...">
+                    </div>
+                    <div class="form-group">
+                        <label>Detail Description Content</label>
+                        <textarea id="diaryDescription" rows="6" required placeholder="Document your thoughts..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Choose Privacy Level</label>
+                        <select id="diaryScope">
+                            <option value="false">Private Archive (Personal View Only)</option>
+                            <option value="true">Shared Log (Visible to Partner)</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="submit" class="btn btn-success">Publish Record</button>
+                        <button type="button" id="closeDiaryModalBtn" class="btn btn-danger">Close</button>
+                    </div>
+                </form>
             </div>
         </div>
 
-        <div id="connectedView" class="grid-layout" style="display: none;">
-            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                <div class="panel">
-                    <h2>Space Partner Profile</h2>
-                    <p style="margin: 0.75rem 0;" id="partnerNameDisplay">Linked Account: --</p>
-                    <p style="margin: 0.75rem 0;" id="spaceTypeDisplay">Status: --</p>
-                    <div id="countdownContainer" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;"></div>
-                </div>
-
-                <div class="panel">
-                    <h2>New Diary Log Entry</h2>
-                    <form id="diaryForm" style="margin-top: 1rem;">
-                        <input type="hidden" id="editDiaryId" value="">
-                        <input type="hidden" id="editDiaryIsShared" value="">
-                        <div class="form-group">
-                            <label>Title</label>
-                            <input type="text" id="diaryTitle" required placeholder="A memorable title...">
-                        </div>
-                        <div class="form-group">
-                            <label>Detail Description Content</label>
-                            <textarea id="diaryDescription" rows="4" required placeholder="Document your thoughts..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Choose Privacy Level</label>
-                            <select id="diaryScope">
-                                <option value="false">Private Archive (Personal View Only)</option>
-                                <option value="true">Shared Log (Visible to Partner)</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-success" style="width: 100%;">Publish Record</button>
-                    </form>
-                </div>
+        <div id="photoModal" class="modal-overlay">
+            <div class="modal-content panel" style="width:480px; max-width:90%;">
+                <h3>Upload Picture</h3>
+                <form id="photoForm" enctype="multipart/form-data" style="margin-top:1rem;">
+                    <div class="form-group">
+                        <label>Select Image</label>
+                        <input type="file" id="photoFileInput" accept="image/*" required />
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="submit" class="btn btn-pink">Upload Picture</button>
+                        <button type="button" id="closePhotoModalBtn" class="btn btn-danger">Close</button>
+                    </div>
+                </form>
             </div>
-
-            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                <div class="panel">
-                    <h2>Your Personal Diary</h2>
-                    <div id="personalFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
-                </div>
-
-                <div class="panel">
-                    <h2>Our Shared Journal</h2>
-                    <div id="sharedFeed" style="margin-top: 1rem; max-height: 350px; overflow-y: auto;"></div>
-                </div>
-            </div>
-            
         </div>
-        <div class="portal-card full-width" style="margin-top: 2rem;">
-                <div class="card-header">
-                    <h2>🎮 Shared Space Arcade: Retro Tic-Tac-Toe</h2>
-                    <span id="gameTurnIndicator" class="badge">Loading game ...</span>
-                </div>
-                
-                <div class="game-container" style="display: flex; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;">
-                    <div id="gameBoard" class="game-board-grid">
-                        <div class="game-cell" data-index="0"></div>
-                        <div class="game-cell" data-index="1"></div>
-                        <div class="game-cell" data-index="2"></div>
-                        <div class="game-cell" data-index="3"></div>
-                        <div class="game-cell" data-index="4"></div>
-                        <div class="game-cell" data-index="5"></div>
-                        <div class="game-cell" data-index="6"></div>
-                        <div class="game-cell" data-index="7"></div>
-                        <div class="game-cell" data-index="8"></div>
-                    </div>
 
-                    <div class="game-status-panel" style="flex: 1; min-width: 250px; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <p style="margin-bottom: 0.5rem;">Your Assignment Symbol: <strong id="userSymbolDisplay" style="color: #4da6ff; font-size: 1.2rem;">-</strong></p>
-                            <p style="font-size: 0.9rem; color: #a8a8b3; line-height: 1.4;">
-                                <strong>Rules:</strong> Player 1 (Space Inviter) operates as <span style="color:#f75a5a; font-weight:bold;">X</span>. Player 2 (Recipient) operates as <span style="color:#4da6ff; font-weight:bold;">O</span>.
-                            </p>
-                        </div>
-                        <button id="resetGameBtn" class="btn btn-danger" style="margin-top: 1rem; width: 100%;">🔄 Reset Board Matrix</button>
-                    </div>
-                </div>
-    </div>
+    <style>
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { border-radius: 8px; }
+        .btn-purple { background: #8257e5; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; border: none; cursor: pointer; }
+        .btn-pink { background: #ff79c6; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; border: none; cursor: pointer; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+        .gallery-grid img { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #29292e; }
+        .theme-lover h1, .theme-lover h2, .theme-lover .badge { color: #ff79c6; }
+        .theme-lover .sidebar-panel { border-color: #ff79c6; }
+        .theme-lover .connection-item.active { border-color: #ff79c6; }
+        .theme-lover .btn-primary { background: #ff79c6; }
+    </style>
 
     <script src="portal.js"></script>
 </body>
