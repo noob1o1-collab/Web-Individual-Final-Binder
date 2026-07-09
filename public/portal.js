@@ -1,8 +1,8 @@
 let localCsrfToken = "";
 let currentUserContext = null;
-let gamePollingIntervalId = null;
-let clientGameSymbol = " ";
-let isMyTurnToken = false;
+let activeConnectionId = null;
+let acceptedConnections = [];
+// game features removed
 
 function flashSystemMessage(msg, isSuccess = true) {
     const banner = document.getElementById('portalMessage');
@@ -19,7 +19,7 @@ function flashSystemMessage(msg, isSuccess = true) {
 
 function parseDateCountdown(targetDateString, labelingText) {
     if (!targetDateString) {
-        return `<div class="countdown-ticker">${labelingText}: Not configured</div>`;
+        return "";
     }
 
     const current = new Date();
@@ -55,29 +55,9 @@ async function runDashboardLifecycleBootstrap() {
             greeting.innerText = `User: ${currentUserContext.username}`;
         }
 
-        await determineRelationshipSpaceParadigm();
-    } catch (error) {
-        console.error('Dashboard engine compilation error:', error);
-    }
-}
-
-async function runDashboardLifecycleBootstrap() {
-    try {
-        const tokenResponse = await fetch('/api/csrf-token');
-        const tokenData = await tokenResponse.json();
-        localCsrfToken = tokenData.csrfToken;
-
-        const authResponse = await fetch('/api/users/me');
-        if (!authResponse.ok) {
-            window.location.href = '/index.html';
-            return;
-        }
-
-        const authData = await authResponse.json();
-        currentUserContext = authData.user;
-        const greeting = document.getElementById('userGreeting');
-        if (greeting) {
-            greeting.innerText = `User: ${currentUserContext.username}`;
+        const homeUsernameEl = document.getElementById('homeUsername');
+        if (homeUsernameEl) {
+            homeUsernameEl.innerText = currentUserContext.username;
         }
 
         await determineRelationshipSpaceParadigm();
@@ -92,37 +72,26 @@ async function determineRelationshipSpaceParadigm() {
         const statusData = await response.json();
 
         if (statusData.connected === false) {
-            const connectedView = document.getElementById('connectedView');
             const unconnectedView = document.getElementById('unconnectedView');
-            if (connectedView) connectedView.style.display = 'none';
-            if (unconnectedView) unconnectedView.style.display = 'grid';
+            const homeView = document.getElementById('homeView');
+            const activeWorkspace = document.getElementById('activeWorkspace');
+            
+            if (unconnectedView) unconnectedView.style.display = 'block';
+            if (homeView) homeView.style.display = 'block';
+            if (activeWorkspace) activeWorkspace.style.display = 'none';
+            
+            const sidePanel = document.getElementById('switchSpaceTab') || document.getElementById('connectionList');
+            if (sidePanel) {
+                sidePanel.innerHTML = '<p style="color:#a8a8b3; font-size:0.9rem; padding:1rem;">no partner linked yet, check invite or search username of your loved one</p>';
+            }
+            
             await loadPendingInvitationsList();
         } else {
-            const connectedView = document.getElementById('connectedView');
-            const unconnectedView = document.getElementById('unconnectedView');
-            if (connectedView) connectedView.style.display = 'grid';
-            if (unconnectedView) unconnectedView.style.display = 'none';
-
-            const partner = statusData.partner;
-            const partnerNameDisplay = document.getElementById('partnerNameDisplay');
-            const spaceTypeDisplay = document.getElementById('spaceTypeDisplay');
-            if (partnerNameDisplay) {
-                partnerNameDisplay.innerHTML = `Linked Account: <span class="badge">${partner.username}</span>`;
-            }
-            if (spaceTypeDisplay) {
-                spaceTypeDisplay.innerText = `Status: ${partner.relationshipType.toUpperCase()}`;
-            }
-
-            const countdownContainer = document.getElementById('countdownContainer');
-            if (countdownContainer) {
-                let countdownHTML = parseDateCountdown(partner.birthday, `${partner.username}'s Birthday Celebration`);
-                if (partner.anniversaryDate) {
-                    countdownHTML += parseDateCountdown(partner.anniversaryDate, 'Our Space Anniversary');
-                }
-                countdownContainer.innerHTML = countdownHTML;
-            }
-
-            await Promise.all([renderPersonalFeedList(), renderSharedFeedList()]);
+            if (document.getElementById('unconnectedView')) document.getElementById('unconnectedView').style.display = 'none';
+            if (document.getElementById('homeView')) document.getElementById('homeView').style.display = 'block';
+            if (document.getElementById('activeWorkspace')) document.getElementById('activeWorkspace').style.display = 'none';
+            
+            await loadAcceptedConnections();
         }
     } catch (err) {
         console.error('Failed compiling space distribution trees:', err);
@@ -167,6 +136,176 @@ async function loadPendingInvitationsList() {
         if (badge) { badge.style.display = 'none'; badge.innerText = '0'; }
     }
 }
+
+async function loadAcceptedConnections() {
+    const listElement = document.getElementById('connectionList');
+    if (!listElement) return;
+
+    try {
+        const res = await fetch('/api/connections/accepted');
+        if (!res.ok) {
+            listElement.innerHTML = '<div style="color:#f75a5a;">Unable to load spaces.</div>';
+            return;
+        }
+
+        const data = await res.json();
+        acceptedConnections = data.connections || [];
+
+        if (!acceptedConnections.length) {
+            listElement.innerText = 'no partner linked yet, check invite or search username of your loved one';
+            return;
+        }
+
+        listElement.innerHTML = acceptedConnections.map(connection => {
+            return `
+                <div class="connection-item" data-connection-id="${connection.cid}">
+                    <div style="display:flex; flex-direction:column;">
+                        <strong style="font-size:1rem;">${connection.partner_username}</strong>
+                        <span style="font-size:0.85rem; color:#a8a8b3;">${connection.relationship_type}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        document.querySelectorAll('.connection-item').forEach(item => {
+            item.addEventListener('click', async () => {
+                const connectionId = item.getAttribute('data-connection-id');
+                if (!connectionId) return;
+                activeConnectionId = Number(connectionId);
+                const rightPanel = document.getElementById('activeWorkspace');
+                if (rightPanel) rightPanel.style.display = 'block';
+                await selectWorkspaceConnection(Number(connectionId));
+            });
+        });
+
+        if (acceptedConnections.length > 0 && !activeConnectionId) {
+            await selectWorkspaceConnection(acceptedConnections[0].cid);
+        }
+    } catch (err) {
+        listElement.innerHTML = '<div style="color:#f75a5a;">Failed loading spaces.</div>';
+    }
+}
+
+async function selectWorkspaceConnection(connectionId) {
+    const homeView = document.getElementById('homeView');
+    const activeWorkspace = document.getElementById('activeWorkspace');
+    const activeHeader = document.getElementById('activeSpaceHeader');
+    const activeSubheader = document.getElementById('activeSpaceSubheader');
+
+    activeConnectionId = connectionId;
+    if (homeView) homeView.style.display = 'none';
+    if (activeWorkspace) activeWorkspace.style.display = 'block';
+
+    document.querySelectorAll('.connection-item').forEach(item => {
+        item.classList.toggle('active', item.getAttribute('data-connection-id') === String(connectionId));
+    });
+
+    const connection = acceptedConnections.find(conn => conn.cid === connectionId);
+    if (activeHeader && connection) {
+        activeHeader.innerText = `Active Workspace with: ${connection.partner_username}`;
+    }
+    if (activeSubheader && connection) {
+        activeSubheader.innerText = `${connection.relationship_type} space is active for this session.`;
+    }
+
+    const body = document.body;
+    const openDiaryBtn = document.getElementById('openDiaryModalBtn');
+    if (connection && connection.relationship_type === 'lover') {
+        body.classList.add('theme-lover');
+        if (openDiaryBtn) openDiaryBtn.innerText = 'Send Love Letter';
+    } else {
+        body.classList.remove('theme-lover');
+        if (openDiaryBtn) openDiaryBtn.innerText = 'Add Notes';
+    }
+
+    await Promise.all([
+        renderPersonalFeedList(),
+        renderSharedFeedList(),
+        renderConnectionCounters(),
+        renderSharedGallery()
+    ]);
+}
+
+async function renderSharedGallery() {
+    const container = document.getElementById('sharedGallery');
+    if (!container) return;
+    if (!activeConnectionId) {
+        container.innerHTML = '<p style="color:#a8a8b3;">No gallery available.</p>';
+        return;
+    }
+    try {
+        const res = await fetch(`/api/photos/shared?connectionId=${activeConnectionId}`);
+        const data = await res.json();
+        if (!res.ok) {
+            container.innerHTML = `<p style="color:#f75a5a;">${data.error || 'Failed to load gallery.'}</p>`;
+            return;
+        }
+        if (!data.photos || data.photos.length === 0) {
+            container.innerHTML = '<p style="color:#a8a8b3;">No images uploaded yet.</p>';
+            return;
+        }
+        container.innerHTML = data.photos.map(p => `<img src="${p.file_path}" alt="photo-${p.pid}" />`).join('');
+    } catch (err) {
+        container.innerText = 'Error loading gallery.';
+    }
+}
+
+async function renderConnectionCounters() {
+    const countdownContainer = document.getElementById('countdownContainer');
+    if (!countdownContainer) return;
+
+    if (!activeConnectionId) {
+        countdownContainer.innerHTML = '';
+        return;
+    }
+
+    const res = await fetch(`/api/connections/detail?connectionId=${activeConnectionId}`);
+    if (!res.ok) {
+        countdownContainer.innerHTML = '<div style="color:#f75a5a;">Unable to load connection counters.</div>';
+        return;
+    }
+
+    const data = await res.json();
+    const connection = data.connection;
+    if (!connection) {
+        countdownContainer.innerHTML = '<div style="color:#f75a5a;">Connection details unavailable.</div>';
+        return;
+    }
+
+    const today = new Date();
+    const tMonth = today.getMonth();
+    const tDate = today.getDate();
+
+    const welcomeCard = document.getElementById('welcomeCard');
+    let countdownHTML = '';
+
+    if (connection.partner_birthday) {
+        const pb = new Date(connection.partner_birthday);
+        if (pb.getMonth() === tMonth && pb.getDate() === tDate) {
+            if (welcomeCard) welcomeCard.innerHTML = `<h2>🎉 Happy Birthday ${connection.partner_username}! 🎂✨</h2>`;
+            countdownHTML += `<div class="countdown-ticker">🎉 Today is ${connection.partner_username}'s Birthday! 🎂</div>`;
+        } else {
+            countdownHTML += parseDateCountdown(connection.partner_birthday, `${connection.partner_username}'s Birthday Celebration`);
+        }
+    }
+
+    if (connection.anniversary_date) {
+        const ad = new Date(connection.anniversary_date);
+        if (ad.getMonth() === tMonth && ad.getDate() === tDate) {
+            if (welcomeCard && currentUserContext) welcomeCard.innerHTML = `<h2>💖 Happy Anniversary ${currentUserContext.username}! 💑✨</h2>`;
+            countdownHTML += `<div class="countdown-ticker">💖 Today is your Space Anniversary! 💑</div>`;
+        } else {
+            countdownHTML += parseDateCountdown(connection.anniversary_date, 'Our Space Anniversary');
+        }
+    }
+
+    if (!connection.partner_birthday && !connection.anniversary_date) {
+        countdownHTML = '';
+    }
+
+    if (countdownContainer) countdownContainer.innerHTML = countdownHTML;
+}
+
 
 async function resolveRequestHook(connectionId, actionType) {
     try {
@@ -223,7 +362,8 @@ async function renderPersonalFeedList() {
     if (!feed) return;
 
     try {
-        const res = await fetch('/api/diaries/personal');
+        const url = activeConnectionId ? `/api/diaries/personal?connectionId=${activeConnectionId}` : '/api/diaries/personal';
+        const res = await fetch(url);
         const data = await res.json();
 
         if (!res.ok) {
@@ -259,7 +399,8 @@ async function renderSharedFeedList() {
     if (!feed) return;
 
     try {
-        const res = await fetch('/api/diaries/shared');
+        const url = activeConnectionId ? `/api/diaries/shared?connectionId=${activeConnectionId}` : '/api/diaries/shared';
+        const res = await fetch(url);
         const data = await res.json();
 
         if (!res.ok) {
@@ -308,9 +449,10 @@ if (diaryForm) {
 
         const requestUrl = targetEditId ? `/api/diaries/edit/${targetEditId}` : '/api/diaries/add';
         const requestMethod = targetEditId ? 'PUT' : 'POST';
+        const url = activeConnectionId ? `${requestUrl}?connectionId=${activeConnectionId}` : requestUrl;
 
         try {
-            const res = await fetch(requestUrl, {
+            const res = await fetch(url, {
                 method: requestMethod,
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
                 body: JSON.stringify(payload)
@@ -320,7 +462,9 @@ if (diaryForm) {
             if (res.ok) {
                 flashSystemMessage(output.message, true);
                 clearDiaryFormWorkspaceState();
-                await Promise.all([renderPersonalFeedList(), renderSharedFeedList()]);
+                const diaryModal = document.getElementById('diaryModal');
+                if (diaryModal) diaryModal.style.display = 'none';
+                await Promise.all([renderPersonalFeedList(), renderSharedFeedList(), renderSharedGallery()]);
             } else {
                 flashSystemMessage(output.error, false);
             }
@@ -435,141 +579,7 @@ function clearDiaryFormWorkspaceState() {
     if (cancelBtn) cancelBtn.remove();
 }
 
-async function syncGameStateRoutine() {
-    try {
-        const res = await fetch('/api/games/state');
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const { game, playerSymbol, currentUserId } = data;
-
-        clientGameSymbol = playerSymbol;
-        const userSymbolDisplay = document.getElementById('userSymbolDisplay');
-        if (userSymbolDisplay) {
-            userSymbolDisplay.innerText = playerSymbol;
-        }
-
-        const cells = document.querySelectorAll('.game-cell');
-        if (!cells.length) return;
-
-        const boardState = game.board.split('');
-        boardState.forEach((symbol, index) => {
-            const cell = cells[index];
-            if (!cell) return;
-            cell.innerText = symbol !== ' ' ? symbol : '';
-            cell.setAttribute('data-symbol', symbol);
-            if (symbol !== ' ') {
-                cell.classList.add('taken');
-            } else {
-                cell.classList.remove('taken');
-            }
-        });
-
-        const turnIndicator = document.getElementById('gameTurnIndicator');
-        if (!turnIndicator) return;
-
-        if (game.status === 'won') {
-            if (game.winner_id === currentUserId) {
-                turnIndicator.innerText = '🏆 Victory Achieved!';
-                turnIndicator.style.background = 'rgba(4, 211, 97, 0.2)';
-                turnIndicator.style.color = '#04d361';
-            } else {
-                turnIndicator.innerText = '🚨 Defeat Recorded.';
-                turnIndicator.style.background = 'rgba(247, 90, 90, 0.2)';
-                turnIndicator.style.color = '#f75a5a';
-            }
-            isMyTurnToken = false;
-        } else if (game.status === 'draw') {
-            turnIndicator.innerText = '🤝 Matrix Stagnated (Draw)';
-            turnIndicator.style.background = '#323238';
-            turnIndicator.style.color = '#a8a8b3';
-            isMyTurnToken = false;
-        } else if (game.turn_user_id === currentUserId) {
-            turnIndicator.innerText = '⚡ Your Strategic Turn';
-            turnIndicator.style.background = '#04d361';
-            turnIndicator.style.color = '#121214';
-            isMyTurnToken = true;
-        } else {
-            turnIndicator.innerText = '⏳ Partner Calculating Move...';
-            turnIndicator.style.background = '#29292e';
-            turnIndicator.style.color = '#a8a8b3';
-            isMyTurnToken = false;
-        }
-    } catch (err) {
-        console.error('Game sync routine telemetry failure:', err);
-    }
-}
-
-async function executeCellClickMove(cellIndex) {
-    if (!isMyTurnToken) {
-        flashSystemMessage('Negative payload. Wait for your active tactical sync turn.', false);
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/games/move', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': localCsrfToken },
-            body: JSON.stringify({ cellIndex })
-        });
-        const output = await res.json();
-
-        if (res.ok) {
-            await syncGameStateRoutine();
-        } else {
-            flashSystemMessage(output.error, false);
-        }
-    } catch (err) {
-        flashSystemMessage('Network connection breakdown passing game turn coordinates.', false);
-    }
-}
-
-async function executeGameResetSequence() {
-    if (!confirm('Are you certain you want to clear the active board state?')) return;
-
-    try {
-        const res = await fetch('/api/games/reset', {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': localCsrfToken }
-        });
-        if (res.ok) {
-            flashSystemMessage('Game board configuration re-initialized.', true);
-            await syncGameStateRoutine();
-        }
-    } catch (err) {
-        flashSystemMessage('Failed executing reset matrix command routing.', false);
-    }
-}
-
-function initializeGameClickListeners() {
-    const board = document.getElementById('gameBoard');
-    const resetBtn = document.getElementById('resetGameBtn');
-
-    if (!board || !resetBtn) return;
-
-    board.onclick = (e) => {
-        const cell = e.target.closest('.game-cell');
-        if (!cell) return;
-        const cellIndex = parseInt(cell.getAttribute('data-index'));
-        executeCellClickMove(cellIndex);
-    };
-
-    resetBtn.onclick = executeGameResetSequence;
-}
-
-function startGamePolling() {
-    if (gamePollingIntervalId) clearInterval(gamePollingIntervalId);
-    syncGameStateRoutine();
-    gamePollingIntervalId = setInterval(syncGameStateRoutine, 3000);
-}
-
-function initializeGameLoop() {
-    initializeGameClickListeners();
-    startGamePolling();
-}
-
 runDashboardLifecycleBootstrap();
-initializeGameLoop();
 
 function setupNotificationHandlers() {
     const btn = document.getElementById('notifButton');
@@ -601,3 +611,57 @@ function setupNotificationHandlers() {
 }
 
 setupNotificationHandlers();
+
+function setupModalHandlers() {
+    const diaryModal = document.getElementById('diaryModal');
+    const photoModal = document.getElementById('photoModal');
+    const openDiary = document.getElementById('openDiaryModalBtn');
+    const closeDiary = document.getElementById('closeDiaryModalBtn');
+    const openPhoto = document.getElementById('openPhotoModalBtn');
+    const closePhoto = document.getElementById('closePhotoModalBtn');
+
+    if (openDiary && diaryModal) openDiary.addEventListener('click', () => { diaryModal.style.display = 'flex'; });
+    if (closeDiary && diaryModal) closeDiary.addEventListener('click', () => { diaryModal.style.display = 'none'; });
+    if (openPhoto && photoModal) openPhoto.addEventListener('click', () => { photoModal.style.display = 'flex'; });
+    if (closePhoto && photoModal) closePhoto.addEventListener('click', () => { photoModal.style.display = 'none'; });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (diaryModal) diaryModal.style.display = 'none';
+            if (photoModal) photoModal.style.display = 'none';
+        }
+    });
+}
+
+setupModalHandlers();
+
+const photoForm = document.getElementById('photoForm');
+if (photoForm) {
+    photoForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!activeConnectionId) { flashSystemMessage('Select a connection first.', false); return; }
+        const input = document.getElementById('photoFileInput');
+        if (!input || !input.files || input.files.length === 0) { flashSystemMessage('Select a photo to upload.', false); return; }
+        const fd = new FormData();
+        fd.append('photo', input.files[0]);
+        try {
+            const res = await fetch(`/api/photos/upload?connectionId=${activeConnectionId}`, {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': localCsrfToken },
+                body: fd
+            });
+            const out = await res.json();
+            if (res.ok) {
+                flashSystemMessage(out.message, true);
+                const photoModal = document.getElementById('photoModal');
+                if (photoModal) photoModal.style.display = 'none';
+                document.getElementById('photoFileInput').value = '';
+                await renderSharedGallery();
+            } else {
+                flashSystemMessage(out.error, false);
+            }
+        } catch (err) {
+            flashSystemMessage('Upload failed.', false);
+        }
+    });
+}
