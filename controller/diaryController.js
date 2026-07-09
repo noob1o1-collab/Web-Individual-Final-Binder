@@ -5,19 +5,23 @@ exports.addDiaryEntry = async (req, res) => {
     try {
         const { title, description, isShared } = req.body;
         const currentUserId = req.user.id;
+        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
 
         if (!title || !description) {
             return res.status(400).json({ error: 'Diary entry title and description body fields are required.' });
         }
 
         if (isShared === true || isShared === 'true') {
-            const activeLink = await ConnectionModel.getActiveConnection(currentUserId);
+            if (!connectionId) {
+                return res.status(400).json({ error: 'Connection id is required to write shared diary entries.' });
+            }
+            const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
             if (!activeLink) {
                 return res.status(403).json({ error: 'Access denied. You must be in an accepted relationship space to write to a shared journal.' });
             }
         }
 
-        const savedEntry = await DiaryModel.createEntry(title, description, currentUserId, isShared);
+        const savedEntry = await DiaryModel.createEntry(title, description, currentUserId, isShared, connectionId ? Number(connectionId) : null);
         return res.status(201).json({ success: true, message: 'Log entry added successfully.', entry: savedEntry });
     } catch (error) {
         console.error('Diary posting handling exception:', error);
@@ -36,12 +40,19 @@ exports.fetchPersonalSpace = async (req, res) => {
 
 exports.fetchSharedSpace = async (req, res) => {
     try {
-        const activeLink = await ConnectionModel.getActiveConnection(req.user.id);
+        const currentUserId = req.user.id;
+        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
+
+        if (!connectionId) {
+            return res.status(400).json({ error: 'Connection id is required to fetch shared diary entries.' });
+        }
+
+        const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
         if (!activeLink) {
             return res.status(403).json({ error: 'Access denied. Shared archives are locked until a connection space is active.' });
         }
 
-        const logs = await DiaryModel.getSharedEntries(req.user.id);
+        const logs = await DiaryModel.getSharedEntries(req.user.id, Number(connectionId));
         return res.json({ success: true, space: 'collaborative', logs });
     } catch (error) {
         return res.status(500).json({ error: 'Internal server error pulling shared journals.' });
@@ -75,6 +86,7 @@ exports.editDiaryEntry = async (req, res) => {
         const { id } = req.params;
         const { title, description } = req.body;
         const userId = req.user.id;
+        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
 
         const targetEntry = await DiaryModel.getEntryById(id);
         if (!targetEntry) {
@@ -88,7 +100,11 @@ exports.editDiaryEntry = async (req, res) => {
                 return res.status(403).json({ error: 'Unauthorized operation. You can only edit your own diary logs.' });
             }
 
-            const activeLink = await ConnectionModel.getActiveConnection(userId);
+            if (!connectionId) {
+                return res.status(400).json({ error: 'Connection id is required to edit shared diary entries.' });
+            }
+
+            const activeLink = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), userId);
             if (!activeLink || (targetEntry.creator !== activeLink.sender_id && targetEntry.creator !== activeLink.receiver_id)) {
                 return res.status(403).json({ error: 'Unauthorized operation. You can only edit shared entries within your accepted connection.' });
             }
