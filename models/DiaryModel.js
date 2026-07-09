@@ -1,13 +1,13 @@
 const db = require('../config/db');
 
-const createEntry = async (title, description, creatorId, isShared) => {
+const createEntry = async (title, description, creatorId, isShared, connectionId = null) => {
     try {
         const query = `
-            INSERT INTO diaries (title, description, creator, is_shared)
-            VALUES ($1, $2, $3, $4)
-            RETURNING did, title, description, is_shared, created_at
+            INSERT INTO diaries (title, description, creator, connection_id, is_shared)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING did, title, description, connection_id, is_shared, created_at
         `;
-        const values = [title, description, creatorId, isShared || false];
+        const values = [title, description, creatorId, connectionId, isShared || false];
         const result = await db.query(query, values);
         return result.rows[0];
     } catch (error) {
@@ -32,24 +32,22 @@ const getPersonalEntries = async (userId) => {
     }
 };
 
-const getSharedEntries = async (userId) => {
+const getSharedEntries = async (userId, connectionId) => {
     try {
         const query = `
             SELECT d.did, d.title, d.description, d.created_at, u.firstname AS creator_username
             FROM diaries d
             JOIN users u ON u.uid = d.creator
-            WHERE d.is_shared = TRUE 
-              AND (d.creator = $1 OR d.creator = (
-                  SELECT CASE 
-                      WHEN sender_id = $1 THEN receiver_id 
-                      ELSE sender_id 
-                  END 
-                  FROM connections 
-                  WHERE (sender_id = $1 OR receiver_id = $1) AND status = 'accepted' LIMIT 1
-              ))
+            WHERE d.is_shared = TRUE
+              AND EXISTS (
+                  SELECT 1 FROM connections c
+                  WHERE c.cid = $2 AND c.status = 'accepted'
+                    AND ((c.sender_id = $1 AND d.creator IN ($1, c.receiver_id))
+                         OR (c.receiver_id = $1 AND d.creator IN ($1, c.sender_id)))
+              )
             ORDER BY d.created_at DESC
         `;
-        const result = await db.query(query, [userId]);
+        const result = await db.query(query, [userId, connectionId]);
         return result.rows;
     } catch (error) {
         console.error('Database collaborative list query failure:', error);
