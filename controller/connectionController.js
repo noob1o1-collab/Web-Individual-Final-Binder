@@ -105,13 +105,13 @@ exports.declineConnection = async (req, res) => {
         return res.status(500).json({ error: 'Internal server error declining connection request.' });
     }
 };
+
 exports.getConnectionStatus = async (req, res) => {
     try {
-        const currentUserId = req.user.id; 
-        
-        const activeConnection = await ConnectionModel.getActiveConnection(currentUserId);
+        const currentUserId = req.user.id;
+        const activeConnections = await ConnectionModel.getAcceptedConnectionsForUser(currentUserId);
 
-        if (!activeConnection) {
+        if (!activeConnections || activeConnections.length === 0) {
             return res.json({ 
                 success: true, 
                 connected: false, 
@@ -119,24 +119,60 @@ exports.getConnectionStatus = async (req, res) => {
             });
         }
 
-        const isSender = activeConnection.sender_id === currentUserId;
-        
+        const firstConnection = activeConnections[0];
         const partnerInfo = {
-            id: isSender ? activeConnection.receiver_id : activeConnection.sender_id,
-            username: isSender ? activeConnection.receiver_username : activeConnection.sender_username,
-            birthday: isSender ? activeConnection.receiver_birthday : activeConnection.sender_birthday,
-            relationshipType: activeConnection.relationship_type,
-            anniversaryDate: activeConnection.anniversary_date
+            id: firstConnection.partner_id,
+            username: firstConnection.partner_username,
+            birthday: firstConnection.partner_birthday,
+            relationshipType: firstConnection.relationship_type,
+            anniversaryDate: firstConnection.anniversary_date
         };
 
         return res.json({
             success: true,
             connected: true,
-            connectionId: activeConnection.cid,
+            connectionId: firstConnection.cid,
             partner: partnerInfo
         });
     } catch (error) {
         console.error('Error within getConnectionStatus routine:', error);
         return res.status(500).json({ error: 'Internal server error processing relationship status query.' });
+    }
+};
+
+exports.getAcceptedConnections = async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const connections = await ConnectionModel.getAcceptedConnectionsForUser(currentUserId);
+        return res.json({ success: true, connections });
+    } catch (error) {
+        console.error('Error fetching accepted connections:', error);
+        return res.status(500).json({ error: 'Internal server error pulling accepted connections.' });
+    }
+};
+
+exports.getConnectionDetail = async (req, res) => {
+    try {
+        const connectionId = req.query.connectionId || req.headers['x-connection-id'];
+        if (!connectionId) {
+            return res.status(400).json({ error: 'Connection id is required.' });
+        }
+        const currentUserId = req.user.id;
+        const connection = await ConnectionModel.getAcceptedConnectionForUserById(Number(connectionId), currentUserId);
+        if (!connection) {
+            return res.status(404).json({ error: 'Connection not found or not accepted.' });
+        }
+        const isSender = connection.sender_id === currentUserId;
+        const partnerInfo = {
+            id: isSender ? connection.receiver_id : connection.sender_id,
+            partner_username: isSender ? connection.receiver_username : connection.sender_username,
+            partner_birthday: isSender ? connection.receiver_birthday : connection.sender_birthday,
+            relationship_type: connection.relationship_type,
+            anniversary_date: connection.anniversary_date
+        };
+        return res.json({ success: true, connection: partnerInfo });
+    } catch (error) {
+        console.error('Error fetching connection detail:', error);
+        return res.status(500).json({ error: 'Internal server error retrieving connection detail.' });
     }
 };
