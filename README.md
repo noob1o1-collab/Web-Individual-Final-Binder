@@ -27,6 +27,68 @@ To run Space Binder locally on your machine, follow these steps:
 * [PostgreSQL](https://www.postgresql.org/) installed and running
 
 ### 2. Clone the Repository
-```bash
+
+bash
 git clone [https://github.com/yourusername/space-binder.git](https://github.com/yourusername/space-binder.git)
 cd space-binder
+
+
+###3. Install Dependencies
+Bash
+
+npm install
+
+###4. Environment Configuration
+
+Create a .env file in the root directory and configure your PostgreSQL database credentials and session secrets:
+Code snippet
+
+PORT=5000
+DB_HOST=localhost
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=space_binder_db
+DB_PORT=5432
+SESSION_SECRET=your_super_secret_key
+
+###5. Database Setup
+
+Ensure your PostgreSQL database is created. The application requires the following tables to be initialized:
+
+    users
+
+    connections
+
+    diaries
+
+    game_states
+
+    photos
+
+###6. Run the Application
+Bash
+
+npm run dev 
+
+The application will be live at http://localhost:5000.
+📂 Project Structure
+Plaintext
+
+├── config/                 # Database connection logic
+├── controller/             # Backend route logic (diaries, games, photos, connections)
+├── middleware/             # Authentication and security protections
+├── models/                 # PostgreSQL database queries and schemas
+├── public/                 # Frontend assets
+│   ├── portal.html         # Main dashboard layout & UI modals
+│   ├── portal.js           # Client-side state, fetching, and DOM logic
+│   └── uploads/            # Local directory for shared gallery images
+├── routes/                 # Express API endpoint definitions
+├── app.js                  # Express server initialization
+└── package.json            # Node dependencies and scripts
+
+🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the issues page if you want to contribute.
+📝 License
+
+This project is open-source and available under the MIT License.
