@@ -1,11 +1,15 @@
 const router = require('express').Router();
-const diaryController = require('../controller/diaryController');
+const connectionController = require('../controller/connectionController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-router.post('/add', authMiddleware, diaryController.addDiaryEntry);
-router.get('/personal', authMiddleware, diaryController.fetchPersonalSpace);
-router.get('/shared', authMiddleware, diaryController.fetchSharedSpace);
-router.put('/edit/:id', authMiddleware, diaryController.editDiaryEntry);
-router.delete('/delete/:id', authMiddleware, diaryController.eraseDiaryEntry);
+router.post('/request', authMiddleware, connectionController.sendConnectionRequest);
+router.get('/pending', authMiddleware, connectionController.getPendingRequests);
+router.post('/accept/:id', authMiddleware, connectionController.acceptConnection);
+router.post('/decline/:id', authMiddleware, connectionController.declineConnection);
+
+router.get('/pending', authMiddleware, connectionController.getPendingRequests);
+router.get('/status', authMiddleware, connectionController.getConnectionStatus);
+router.get('/accepted', authMiddleware, connectionController.getAcceptedConnections);
+router.get('/detail', authMiddleware, connectionController.getConnectionDetail);
 
 module.exports = router;
