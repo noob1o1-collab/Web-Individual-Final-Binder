@@ -27,10 +27,13 @@ app.get('/api/csrf-token', (req, res) => {
 const userRoutes = require('./routes/userRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
 const diaryRoutes = require('./routes/diaryRoutes');
+const photoRoutes = require('./routes/photoRoutes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/diaries', diaryRoutes);
+app.use('/api/photos', photoRoutes);
+// game routes removed
 app.get('/api/health', (req, res) => {
     res.json({ status: 'healthy', message: 'Binder REST API is fully operational.' });
 });
